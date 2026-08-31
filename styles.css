@@ -289,7 +289,6 @@ td select { min-width: 116px; height: 32px; margin: 0; font-size: 9px; }
 .doc-watermark img { width: 580px; max-width: none; filter: grayscale(1); }
 .doc-header { display: flex; justify-content: space-between; gap: 30px; align-items: center; padding: 0 0 22px; border-bottom: 4px solid #e5232c; }
 .doc-brand { display: flex; flex-direction: column; align-items: flex-start; }
-.doc-brand span { margin: -5px 0 0 8px; color: #777; font-size: 7px; font-weight: 800; letter-spacing: .19em; }
 .doc-logo { width: 154px; height: 82px; object-fit: contain; object-position: left center; filter: none; }
 .doc-meta { min-width: 180px; padding: 13px 16px; border-left: 4px solid #e5232c; background: #f4f4f5; text-align: right; }
 .doc-meta > span { display: block; color: #e5232c; font-size: 8px; font-weight: 800; letter-spacing: .11em; text-transform: uppercase; }

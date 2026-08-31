@@ -246,7 +246,6 @@
       <header class="doc-header">
         <div class="doc-brand">
           <img class="doc-logo" src="${logoUrl}" alt="JG3D Works">
-          <span>CUSTOM 3D DESIGN</span>
         </div>
         <div class="doc-meta"><span>${labels.quote}</span><h2>${escapeHtml(number)}</h2><p>${dateLabel(createdAt)}</p></div>
       </header>
