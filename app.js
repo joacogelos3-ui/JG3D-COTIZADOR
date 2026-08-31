@@ -225,13 +225,13 @@
     const createdAt = record.createdAt || new Date().toISOString();
     const labels = {
       es: {
-        quote: "Presupuesto", client: "Cliente", country: "País", application: "Aplicación", delivery: "Plazo", validity: "Válido hasta", scope: "Alcance del trabajo", deliverables: "Entregables", conditions: "Condiciones", total: "Precio final", payment: "Forma de pago", revisions: "correcciones menores incluidas", normal: "Normal · 7–10 días", priority: "Prioridad · 4–6 días", urgent: "Urgente · 1–3 días", footer: "JG3D Works · Diseño y modelado 3D automotriz · Entrega digital"
+        quote: "Presupuesto", client: "Cliente", country: "País", application: "Aplicación", delivery: "Plazo", validity: "Válido hasta", scope: "Alcance del trabajo", deliverables: "Entregables", conditions: "Condiciones", total: "Precio final", payment: "Forma de pago", revisions: "correcciones menores incluidas", normal: "Normal · 7-10 días", priority: "Prioridad · 4-6 días", urgent: "Urgente · 1-3 días", origin: "Argentina · Entrega digital mundial", contact: "Contacto directo", footer: "Diseño y modelado 3D automotriz"
       },
       en: {
-        quote: "Quotation", client: "Client", country: "Country", application: "Application", delivery: "Delivery time", validity: "Valid until", scope: "Scope of work", deliverables: "Deliverables", conditions: "Terms", total: "Final price", payment: "Payment terms", revisions: "minor revision rounds included", normal: "Standard · 7–10 days", priority: "Priority · 4–6 days", urgent: "Urgent · 1–3 days", footer: "JG3D Works · Automotive 3D design and modeling · Digital delivery"
+        quote: "Quotation", client: "Client", country: "Country", application: "Application", delivery: "Delivery time", validity: "Valid until", scope: "Scope of work", deliverables: "Deliverables", conditions: "Terms", total: "Final price", payment: "Payment terms", revisions: "minor revision rounds included", normal: "Standard · 7-10 days", priority: "Priority · 4-6 days", urgent: "Urgent · 1-3 days", origin: "Argentina · Worldwide digital delivery", contact: "Direct contact", footer: "Automotive 3D design and modeling"
       },
       pt: {
-        quote: "Orçamento", client: "Cliente", country: "País", application: "Aplicação", delivery: "Prazo", validity: "Válido até", scope: "Escopo do trabalho", deliverables: "Entregáveis", conditions: "Condições", total: "Preço final", payment: "Forma de pagamento", revisions: "rodadas de ajustes menores incluídas", normal: "Normal · 7–10 dias", priority: "Prioridade · 4–6 dias", urgent: "Urgente · 1–3 dias", footer: "JG3D Works · Design e modelagem 3D automotiva · Entrega digital"
+        quote: "Orçamento", client: "Cliente", country: "País", application: "Aplicação", delivery: "Prazo", validity: "Válido até", scope: "Escopo do trabalho", deliverables: "Entregáveis", conditions: "Condições", total: "Preço final", payment: "Forma de pagamento", revisions: "rodadas de ajustes menores incluídas", normal: "Normal · 7-10 dias", priority: "Prioridade · 4-6 dias", urgent: "Urgente · 1-3 dias", origin: "Argentina · Entrega digital mundial", contact: "Contato direto", footer: "Design e modelagem 3D automotiva"
       }
     }[data.language] || null;
     const urgencyText = data.urgencyPercent === 40 ? labels.urgent : data.urgencyPercent === 20 ? labels.priority : labels.normal;
@@ -242,11 +242,15 @@
     const defaultCondition = data.language === "pt" ? "Alterações fora do escopo e revisões adicionais serão orçadas separadamente." : data.language === "en" ? "Changes outside the agreed scope and additional revisions will be quoted separately." : "Los cambios fuera del alcance y las revisiones adicionales se cotizarán por separado.";
 
     return `
+      <div class="doc-watermark" aria-hidden="true"><img src="${logoUrl}" alt=""></div>
       <header class="doc-header">
-        <img class="doc-logo" src="${logoUrl}" alt="JG3D Works">
-        <div class="doc-meta"><h2>${labels.quote}</h2><p><strong>${escapeHtml(number)}</strong></p><p>${dateLabel(createdAt)}</p></div>
+        <div class="doc-brand">
+          <img class="doc-logo" src="${logoUrl}" alt="JG3D Works">
+          <span>CUSTOM 3D DESIGN</span>
+        </div>
+        <div class="doc-meta"><span>${labels.quote}</span><h2>${escapeHtml(number)}</h2><p>${dateLabel(createdAt)}</p></div>
       </header>
-      <span class="doc-kicker">JG3D WORKS · CUSTOM 3D DESIGN</span>
+      <span class="doc-kicker">JG3D WORKS · ${labels.quote}</span>
       <h1 class="doc-title">${escapeHtml(data.projectTitle)}</h1>
       <div class="doc-grid">
         <div class="doc-field"><span>${labels.client}</span><strong>${escapeHtml(data.clientName)}</strong></div>
@@ -259,8 +263,29 @@
       <section class="doc-section"><h3>${labels.scope}</h3><p>${escapeHtml(scope).replace(/\n/g, "<br>")}</p></section>
       <section class="doc-section"><h3>${labels.deliverables}</h3><ul>${(data.deliverables.length ? data.deliverables : ["Archivo STL listo para imprimir"]).map(item => `<li>${escapeHtml(item)}</li>`).join("")}</ul></section>
       <section class="doc-section"><h3>${labels.conditions}</h3><ul><li>${data.revisions} ${labels.revisions}.</li><li>${escapeHtml(data.notes || defaultCondition)}</li><li>${data.language === "pt" ? "A entrega dos arquivos finais é realizada após a confirmação do pagamento." : data.language === "en" ? "Final files are delivered after payment confirmation." : "Los archivos finales se entregan después de confirmar el pago."}</li></ul></section>
-      <div class="doc-total"><div><span>${labels.total}</span><strong>${money(data.calculation.finalConverted, data.currency)}</strong></div><p>${paymentText}<br>${data.paymentMethod === "paypal" ? "PayPal" : escapeHtml(data.paymentMethod)}</p></div>
-      <footer class="doc-footer">${labels.footer} · jg3dworks.com</footer>`;
+      <div class="doc-total"><div><span>${labels.total}</span><strong>${money(data.calculation.finalConverted, data.currency)}</strong></div><div class="doc-payment"><span>${labels.payment}</span><p>${paymentText}<br>${data.paymentMethod === "paypal" ? "PayPal" : escapeHtml(data.paymentMethod)}</p></div></div>
+      <footer class="doc-footer">
+        <div class="doc-footer-top">
+          <div class="doc-origin">
+            <svg class="doc-flag" viewBox="0 0 30 20" role="img" aria-label="Argentina">
+              <rect width="30" height="6.67" fill="#74acdf"></rect>
+              <rect y="6.67" width="30" height="6.66" fill="#ffffff"></rect>
+              <rect y="13.33" width="30" height="6.67" fill="#74acdf"></rect>
+              <circle cx="15" cy="10" r="2.1" fill="#f6b40e"></circle>
+            </svg>
+            <div><span>JG3D WORKS</span><strong>${labels.origin}</strong></div>
+          </div>
+          <div class="doc-links" aria-label="${labels.contact}">
+            <a href="https://www.instagram.com/jg3d.works/" target="_blank" rel="noopener noreferrer">
+              <svg class="doc-instagram" viewBox="0 0 24 24" aria-hidden="true"><rect x="3" y="3" width="18" height="18" rx="5"></rect><circle cx="12" cy="12" r="4.2"></circle><circle class="doc-instagram-dot" cx="17.4" cy="6.7" r="1"></circle></svg>
+              <span>@jg3d.works</span>
+            </a>
+            <a href="https://jg3dworks.com/whatsapp/" target="_blank" rel="noopener noreferrer">WhatsApp ↗</a>
+            <a href="https://jg3dworks.com/" target="_blank" rel="noopener noreferrer">jg3dworks.com ↗</a>
+          </div>
+        </div>
+        <p>${labels.footer}</p>
+      </footer>`;
   }
 
   function openPreview(record = null) {
