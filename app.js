@@ -31,11 +31,21 @@
   const countries = { BR: "Brasil", US: "Estados Unidos", AR: "Argentina", OTHER: "Otro país" };
   const languageLabels = { es: "Español", en: "English", pt: "Português" };
   const logoUrl = "https://raw.githubusercontent.com/joacogelos3-ui/jg3dworks/main/assets/jg3d-logo.png";
+  const cloudConfig = window.JG3D_SUPABASE || null;
+  const cloudClient = cloudConfig && window.supabase
+    ? window.supabase.createClient(cloudConfig.url, cloudConfig.publishableKey, {
+      auth: { persistSession: true, autoRefreshToken: true, detectSessionInUrl: true }
+    })
+    : null;
 
   let settings = load(STORAGE.settings, defaults);
   let clients = load(STORAGE.clients, []);
   let quotes = load(STORAGE.quotes, []);
   let currentPreview = null;
+  let currentUser = null;
+  let cloudSyncTimer = null;
+  let suppressCloudSync = false;
+  let appStarted = false;
 
   const $ = (selector, root = document) => root.querySelector(selector);
   const $$ = (selector, root = document) => [...root.querySelectorAll(selector)];
@@ -57,6 +67,74 @@
     localStorage.setItem(STORAGE.clients, JSON.stringify(clients));
     localStorage.setItem(STORAGE.quotes, JSON.stringify(quotes));
     localStorage.setItem(STORAGE.settings, JSON.stringify(settings));
+    if (!suppressCloudSync) scheduleCloudSave();
+  }
+
+  function workspacePayload() {
+    return {
+      user_id: currentUser.id,
+      clients,
+      quotes,
+      settings,
+      updated_at: new Date().toISOString()
+    };
+  }
+
+  async function saveWorkspaceNow() {
+    if (!cloudClient || !currentUser) return;
+    const { error } = await cloudClient.from("workspaces").upsert(workspacePayload(), { onConflict: "user_id" });
+    if (error) throw error;
+  }
+
+  function scheduleCloudSave() {
+    if (!cloudClient || !currentUser) return;
+    clearTimeout(cloudSyncTimer);
+    cloudSyncTimer = setTimeout(async () => {
+      try {
+        await saveWorkspaceNow();
+        setCloudStatus("Sincronizado", "online");
+      } catch (error) {
+        console.error("Supabase sync failed", error);
+        setCloudStatus("Error de sincronización", "error");
+        toast("No se pudo sincronizar con la nube.");
+      }
+    }, 450);
+  }
+
+  async function loadCloudWorkspace() {
+    const { data, error } = await cloudClient
+      .from("workspaces")
+      .select("clients, quotes, settings")
+      .eq("user_id", currentUser.id)
+      .maybeSingle();
+
+    if (error) throw error;
+
+    if (data) {
+      suppressCloudSync = true;
+      clients = Array.isArray(data.clients) ? data.clients : [];
+      quotes = Array.isArray(data.quotes) ? data.quotes : [];
+      settings = {
+        ...structuredClone(defaults),
+        ...(data.settings || {}),
+        rates: { ...defaults.rates, ...((data.settings || {}).rates || {}) }
+      };
+      persist();
+      suppressCloudSync = false;
+      return "loaded";
+    }
+
+    await saveWorkspaceNow();
+    return "migrated";
+  }
+
+  function setCloudStatus(label, state = "online") {
+    const footer = $(".sidebar-footer");
+    if (!footer) return;
+    const title = $("strong", footer);
+    const dot = $(".status-dot", footer);
+    title.textContent = label;
+    dot.dataset.state = state;
   }
 
   function numeric(value, fallback = 0) {
@@ -97,6 +175,103 @@
     node.classList.add("show");
     clearTimeout(toast.timer);
     toast.timer = setTimeout(() => node.classList.remove("show"), 2600);
+  }
+
+  function setAuthMessage(message = "", type = "") {
+    const node = $("#authMessage");
+    node.textContent = message;
+    node.dataset.type = type;
+  }
+
+  function showAuth(message = "", type = "") {
+    $("#appShell").hidden = true;
+    $("#authGate").hidden = false;
+    setAuthMessage(message, type);
+  }
+
+  function friendlyAuthError(error) {
+    const message = String(error?.message || "").toLowerCase();
+    if (message.includes("invalid login credentials")) return "El correo o la contraseña no son correctos.";
+    if (message.includes("email not confirmed")) return "Primero tenés que confirmar el correo en Supabase.";
+    if (message.includes("failed to fetch")) return "No se pudo conectar con Supabase. Revisá tu conexión.";
+    return "No fue posible iniciar sesión. Intentá nuevamente.";
+  }
+
+  async function startAuthenticatedApp(session) {
+    currentUser = session.user;
+    setAuthMessage("Sincronizando tu espacio privado…", "loading");
+
+    try {
+      const result = await loadCloudWorkspace();
+      if (!appStarted) {
+        bindEvents();
+        appStarted = true;
+      }
+      populateClientSelect();
+      populateSettings();
+      resetQuoteForm();
+      renderDashboard();
+      renderClients();
+      renderQuotes();
+      $("#userEmail").textContent = currentUser.email || "Usuario";
+      $("#authGate").hidden = true;
+      $("#appShell").hidden = false;
+      setCloudStatus("Nube segura activa", "online");
+      if (result === "migrated") toast("Datos locales sincronizados con Supabase.");
+    } catch (error) {
+      console.error("Supabase workspace load failed", error);
+      showAuth("La cuenta funciona, pero falta crear la tabla privada en Supabase.", "error");
+    }
+  }
+
+  async function signIn(event) {
+    event.preventDefault();
+    if (!cloudClient) {
+      showAuth("No se pudo cargar la conexión segura.", "error");
+      return;
+    }
+
+    const button = $("#loginButton");
+    button.disabled = true;
+    button.textContent = "Ingresando…";
+    setAuthMessage("Verificando acceso…", "loading");
+
+    const { data, error } = await cloudClient.auth.signInWithPassword({
+      email: $("#loginEmail").value.trim(),
+      password: $("#loginPassword").value
+    });
+
+    button.disabled = false;
+    button.textContent = "Ingresar";
+
+    if (error || !data.session) {
+      setAuthMessage(friendlyAuthError(error), "error");
+      return;
+    }
+
+    $("#loginPassword").value = "";
+    await startAuthenticatedApp(data.session);
+  }
+
+  async function signOut() {
+    const button = $("#logoutButton");
+    button.disabled = true;
+    try {
+      clearTimeout(cloudSyncTimer);
+      await saveWorkspaceNow();
+    } catch (error) {
+      console.error("Final Supabase sync failed", error);
+    }
+    await cloudClient.auth.signOut();
+    currentUser = null;
+    clients = [];
+    quotes = [];
+    settings = structuredClone(defaults);
+    localStorage.removeItem(STORAGE.clients);
+    localStorage.removeItem(STORAGE.quotes);
+    localStorage.removeItem(STORAGE.settings);
+    button.disabled = false;
+    showAuth("Sesión cerrada correctamente.", "success");
   }
 
   function navigate(viewName) {
@@ -590,14 +765,27 @@
     document.addEventListener("keydown", event => { if (event.key === "Escape") closePreview(); });
   }
 
-  function init() {
-    bindEvents();
-    populateClientSelect();
-    populateSettings();
-    resetQuoteForm();
-    renderDashboard();
-    renderClients();
-    renderQuotes();
+  async function init() {
+    $("#loginForm").addEventListener("submit", signIn);
+    $("#logoutButton").addEventListener("click", signOut);
+
+    if (!cloudClient) {
+      showAuth("No se pudo cargar la conexión segura. Recargá la página.", "error");
+      return;
+    }
+
+    setAuthMessage("Comprobando sesión…", "loading");
+    const { data, error } = await cloudClient.auth.getSession();
+    if (error) {
+      showAuth("No se pudo verificar la sesión. Intentá nuevamente.", "error");
+      return;
+    }
+
+    if (data.session) {
+      await startAuthenticatedApp(data.session);
+    } else {
+      showAuth();
+    }
   }
 
   init();

@@ -4,7 +4,7 @@ Aplicación interna para preparar presupuestos de modelado 3D de JG3D Works.
 
 ## Estado actual
 
-Esta primera versión es un prototipo estático para GitHub Pages. Los datos se guardan únicamente en el navegador mediante `localStorage` y no deben utilizarse todavía con información real de clientes.
+La aplicación usa Supabase Auth para el acceso privado y una fila protegida por usuario para sincronizar clientes, presupuestos y configuración. `localStorage` funciona únicamente como caché del dispositivo durante la sesión.
 
 ## Funciones incluidas
 
@@ -19,12 +19,18 @@ Esta primera versión es un prototipo estático para GitHub Pages. Los datos se 
 - Estados del trabajo.
 - Vista imprimible para guardar como PDF.
 - Mensaje de WhatsApp en español, inglés o portugués.
+- Acceso con correo y contraseña.
+- Sincronización privada con Supabase y Row Level Security.
+
+## Configuración inicial de Supabase
+
+1. Ejecutar `supabase/schema.sql` desde **SQL Editor**.
+2. Crear el usuario propietario desde **Authentication > Users > Add user**.
+3. Desactivar el registro público de usuarios desde la configuración de autenticación.
+4. Mantener únicamente la URL y la clave pública en `supabase-config.js`. Nunca usar allí una clave secreta o `service_role`.
 
 ## Próxima etapa
 
-- Autenticación real con Supabase.
-- Base de datos privada.
-- Archivos y presupuestos persistentes.
 - Integración de OpenAI mediante una función segura.
 - Conversión automática de monedas.
 

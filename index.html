@@ -9,10 +9,37 @@
   <meta name="description" content="Cotizador interno de proyectos de modelado 3D de JG3D Works">
   <link rel="preconnect" href="https://raw.githubusercontent.com">
   <link rel="stylesheet" href="styles.css">
+  <script defer src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.min.js"></script>
+  <script defer src="supabase-config.js"></script>
   <script defer src="app.js"></script>
 </head>
 <body>
-  <div class="app-shell">
+  <section class="auth-gate" id="authGate" aria-labelledby="authTitle">
+    <div class="auth-card">
+      <div class="auth-brand">
+        <img src="https://raw.githubusercontent.com/joacogelos3-ui/jg3dworks/main/assets/jg3d-logo.png" alt="JG3D Works">
+        <span>HERRAMIENTA INTERNA</span>
+      </div>
+      <div class="auth-heading">
+        <span class="eyebrow">ACCESO PRIVADO</span>
+        <h1 id="authTitle">Cotizador JG3D</h1>
+        <p>Ingresá con tu correo y contraseña para acceder a clientes y presupuestos.</p>
+      </div>
+      <form class="auth-form" id="loginForm">
+        <label>Correo
+          <input id="loginEmail" type="email" autocomplete="username" required placeholder="tu-correo@ejemplo.com">
+        </label>
+        <label>Contraseña
+          <input id="loginPassword" type="password" autocomplete="current-password" required minlength="6" placeholder="Tu contraseña">
+        </label>
+        <button class="primary-button full" id="loginButton" type="submit">Ingresar</button>
+      </form>
+      <p class="auth-message" id="authMessage" role="status" aria-live="polite"></p>
+      <div class="auth-security"><span>●</span><p><strong>Conexión privada</strong> Los datos se guardan en Supabase y solo son visibles para el usuario autenticado.</p></div>
+    </div>
+  </section>
+
+  <div class="app-shell" id="appShell" hidden>
     <aside class="sidebar" id="sidebar">
       <div class="brand-block">
         <img class="brand-logo" src="https://raw.githubusercontent.com/joacogelos3-ui/jg3dworks/main/assets/jg3d-logo.png" alt="JG3D Works">
@@ -33,8 +60,8 @@
       <div class="sidebar-footer">
         <div class="status-dot"></div>
         <div>
-          <strong>Modo prototipo</strong>
-          <span>Datos guardados en este dispositivo</span>
+          <strong>Nube segura activa</strong>
+          <span>Sincronización privada con Supabase</span>
         </div>
       </div>
     </aside>
@@ -47,14 +74,15 @@
           <h1 id="pageTitle">Panel de trabajo</h1>
         </div>
         <div class="topbar-actions">
-          <span class="prototype-pill">PROTOTIPO</span>
-          <button class="avatar-button" type="button" title="Acceso pendiente de Supabase">JG</button>
+          <span class="cloud-pill">● SUPABASE</span>
+          <span class="user-email" id="userEmail"></span>
+          <button class="avatar-button" id="logoutButton" type="button" title="Cerrar sesión">↪</button>
         </div>
       </header>
 
-      <div class="prototype-notice">
-        <strong>Versión inicial de prueba.</strong>
-        No ingreses datos reales de clientes hasta que activemos el acceso seguro con Supabase.
+      <div class="secure-notice">
+        <strong>Espacio privado.</strong>
+        Los clientes, presupuestos y configuraciones se sincronizan con tu cuenta.
       </div>
 
       <section class="view active" id="view-dashboard">
@@ -249,7 +277,7 @@
 
       <section class="view" id="view-clients">
         <div class="split-heading">
-          <div><span class="eyebrow">BASE DE CLIENTES</span><h2>Clientes guardados</h2><p>La versión segura almacenará estos datos en Supabase.</p></div>
+          <div><span class="eyebrow">BASE DE CLIENTES</span><h2>Clientes guardados</h2><p>Datos privados sincronizados con Supabase.</p></div>
           <button class="primary-button" id="newClientButton" type="button">＋ Nuevo cliente</button>
         </div>
         <div class="client-form panel-card hidden" id="clientFormCard">
