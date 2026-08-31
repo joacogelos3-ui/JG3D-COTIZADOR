@@ -308,6 +308,7 @@ td select { min-width: 116px; height: 32px; margin: 0; font-size: 9px; }
 .doc-total { display: flex; justify-content: space-between; gap: 26px; align-items: center; margin-top: 29px; padding: 20px 22px; border-left: 5px solid #e5232c; background: #111114; color: #fff; }
 .doc-total span { display: block; color: #aaa; font-size: 8px; font-weight: 700; letter-spacing: .07em; text-transform: uppercase; }
 .doc-total strong { display: block; margin-top: 5px; color: #fff; font-size: 27px; }
+.doc-price-reference { display: block; margin-top: 7px; color: #bdbdc2; font-size: 8px; font-weight: 600; }
 .doc-payment { max-width: 330px; text-align: right; }
 .doc-total p { margin: 5px 0 0; color: #c9c9cc; font-size: 9px; line-height: 1.5; }
 .doc-footer { margin-top: 27px; padding-top: 16px; border-top: 1px solid #d9d9dc; color: #5b5b60; font-size: 8px; }

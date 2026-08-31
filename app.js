@@ -73,6 +73,12 @@
     }).format(numeric(value));
   }
 
+  function moneyWithCode(value, currency = "USD") {
+    const locale = currency === "ARS" ? "es-AR" : currency === "BRL" ? "pt-BR" : "en-US";
+    const digits = currency === "ARS" ? 0 : 2;
+    return `${currency} ${new Intl.NumberFormat(locale, { minimumFractionDigits: digits, maximumFractionDigits: digits }).format(numeric(value))}`;
+  }
+
   function dateLabel(iso) {
     return new Intl.DateTimeFormat("es-AR", { day: "2-digit", month: "2-digit", year: "numeric" }).format(new Date(iso));
   }
@@ -225,19 +231,24 @@
     const createdAt = record.createdAt || new Date().toISOString();
     const labels = {
       es: {
-        quote: "Presupuesto", client: "Cliente", country: "País", application: "Aplicación", delivery: "Plazo", validity: "Válido hasta", scope: "Alcance del trabajo", deliverables: "Entregables", conditions: "Condiciones", total: "Precio final", payment: "Forma de pago", revisions: "correcciones menores incluidas", normal: "Normal · 7-10 días", priority: "Prioridad · 4-6 días", urgent: "Urgente · 1-3 días", origin: "Argentina · Entrega digital mundial", contact: "Contacto directo", footer: "Diseño y modelado 3D automotriz"
+        quote: "Presupuesto", client: "Cliente", country: "País", application: "Aplicación", delivery: "Plazo", validity: "Válido hasta", scope: "Alcance del trabajo", deliverables: "Entregables", conditions: "Condiciones", total: "Precio final", paypalTotal: "Total a pagar por PayPal", reference: "Referencia aproximada en reales", payment: "Forma de pago", revisions: "correcciones menores incluidas", normal: "Normal · 7-10 días", priority: "Prioridad · 4-6 días", urgent: "Urgente · 1-3 días", origin: "Argentina · Entrega digital mundial", contact: "Contacto directo", footer: "Diseño y modelado 3D automotriz"
       },
       en: {
-        quote: "Quotation", client: "Client", country: "Country", application: "Application", delivery: "Delivery time", validity: "Valid until", scope: "Scope of work", deliverables: "Deliverables", conditions: "Terms", total: "Final price", payment: "Payment terms", revisions: "minor revision rounds included", normal: "Standard · 7-10 days", priority: "Priority · 4-6 days", urgent: "Urgent · 1-3 days", origin: "Argentina · Worldwide digital delivery", contact: "Direct contact", footer: "Automotive 3D design and modeling"
+        quote: "Quotation", client: "Client", country: "Country", application: "Application", delivery: "Delivery time", validity: "Valid until", scope: "Scope of work", deliverables: "Deliverables", conditions: "Terms", total: "Final price", paypalTotal: "Total payable via PayPal", reference: "Approximate reference in Brazilian reais", payment: "Payment terms", revisions: "minor revision rounds included", normal: "Standard · 7-10 days", priority: "Priority · 4-6 days", urgent: "Urgent · 1-3 days", origin: "Argentina · Worldwide digital delivery", contact: "Direct contact", footer: "Automotive 3D design and modeling"
       },
       pt: {
-        quote: "Orçamento", client: "Cliente", country: "País", application: "Aplicação", delivery: "Prazo", validity: "Válido até", scope: "Escopo do trabalho", deliverables: "Entregáveis", conditions: "Condições", total: "Preço final", payment: "Forma de pagamento", revisions: "rodadas de ajustes menores incluídas", normal: "Normal · 7-10 dias", priority: "Prioridade · 4-6 dias", urgent: "Urgente · 1-3 dias", origin: "Argentina · Entrega digital mundial", contact: "Contato direto", footer: "Design e modelagem 3D automotiva"
+        quote: "Orçamento", client: "Cliente", country: "País", application: "Aplicação", delivery: "Prazo", validity: "Válido até", scope: "Escopo do trabalho", deliverables: "Entregáveis", conditions: "Condições", total: "Preço final", paypalTotal: "Total a pagar via PayPal", reference: "Referência aproximada em reais", payment: "Forma de pagamento", revisions: "rodadas de ajustes menores incluídas", normal: "Normal · 7-10 dias", priority: "Prioridade · 4-6 dias", urgent: "Urgente · 1-3 dias", origin: "Argentina · Entrega digital mundial", contact: "Contato direto", footer: "Design e modelagem 3D automotiva"
       }
     }[data.language] || null;
     const urgencyText = data.urgencyPercent === 40 ? labels.urgent : data.urgencyPercent === 20 ? labels.priority : labels.normal;
+    const brazilPaypal = data.country === "BR" && data.paymentMethod === "paypal";
+    const payableTotal = brazilPaypal ? data.calculation.grossUsd : data.calculation.finalConverted;
+    const payableCurrency = brazilPaypal ? "USD" : data.currency;
+    const payableText = brazilPaypal ? moneyWithCode(payableTotal, "USD") : money(payableTotal, payableCurrency);
     const paymentText = data.calculation.installments === 2
-      ? `50% (${money(data.calculation.finalConverted / 2, data.currency)}) + 50% (${money(data.calculation.finalConverted / 2, data.currency)})`
-      : `100% ${money(data.calculation.finalConverted, data.currency)}`;
+      ? `50% (${brazilPaypal ? moneyWithCode(payableTotal / 2, "USD") : money(payableTotal / 2, payableCurrency)}) + 50% (${brazilPaypal ? moneyWithCode(payableTotal / 2, "USD") : money(payableTotal / 2, payableCurrency)})`
+      : `100% ${payableText}`;
+    const brlReference = brazilPaypal ? money(data.calculation.finalConverted, "BRL") : "";
     const scope = data.scope || (data.language === "pt" ? "Modelagem 3D conforme as referências e medidas fornecidas pelo cliente." : data.language === "en" ? "3D modeling according to the references and measurements supplied by the client." : "Modelado 3D según las referencias y medidas suministradas por el cliente.");
     const defaultCondition = data.language === "pt" ? "Alterações fora do escopo e revisões adicionais serão orçadas separadamente." : data.language === "en" ? "Changes outside the agreed scope and additional revisions will be quoted separately." : "Los cambios fuera del alcance y las revisiones adicionales se cotizarán por separado.";
 
@@ -262,7 +273,7 @@
       <section class="doc-section"><h3>${labels.scope}</h3><p>${escapeHtml(scope).replace(/\n/g, "<br>")}</p></section>
       <section class="doc-section"><h3>${labels.deliverables}</h3><ul>${(data.deliverables.length ? data.deliverables : ["Archivo STL listo para imprimir"]).map(item => `<li>${escapeHtml(item)}</li>`).join("")}</ul></section>
       <section class="doc-section"><h3>${labels.conditions}</h3><ul><li>${data.revisions} ${labels.revisions}.</li><li>${escapeHtml(data.notes || defaultCondition)}</li><li>${data.language === "pt" ? "A entrega dos arquivos finais é realizada após a confirmação do pagamento." : data.language === "en" ? "Final files are delivered after payment confirmation." : "Los archivos finales se entregan después de confirmar el pago."}</li></ul></section>
-      <div class="doc-total"><div><span>${labels.total}</span><strong>${money(data.calculation.finalConverted, data.currency)}</strong></div><div class="doc-payment"><span>${labels.payment}</span><p>${paymentText}<br>${data.paymentMethod === "paypal" ? "PayPal" : escapeHtml(data.paymentMethod)}</p></div></div>
+      <div class="doc-total"><div><span>${brazilPaypal ? labels.paypalTotal : labels.total}</span><strong>${payableText}</strong>${brazilPaypal ? `<small class="doc-price-reference">${labels.reference}: ${brlReference}</small>` : ""}</div><div class="doc-payment"><span>${labels.payment}</span><p>${paymentText}<br>${data.paymentMethod === "paypal" ? "PayPal" : escapeHtml(data.paymentMethod)}</p></div></div>
       <footer class="doc-footer">
         <div class="doc-footer-top">
           <div class="doc-origin">
@@ -302,11 +313,18 @@
   function whatsappMessage(record) {
     const data = record.data || record;
     const number = record.number || quoteNumber();
-    const total = money(data.calculation.finalConverted, data.currency);
+    const brazilPaypal = data.country === "BR" && data.paymentMethod === "paypal";
+    const total = brazilPaypal ? moneyWithCode(data.calculation.grossUsd, "USD") : money(data.calculation.finalConverted, data.currency);
+    const totalLabel = brazilPaypal
+      ? (data.language === "pt" ? "Total a pagar via PayPal" : data.language === "en" ? "Total payable via PayPal" : "Total a pagar por PayPal")
+      : "Total";
+    const referenceLine = brazilPaypal
+      ? `\n${data.language === "pt" ? "Referência aproximada em reais" : data.language === "en" ? "Approximate reference in Brazilian reais" : "Referencia aproximada en reales"}: ${money(data.calculation.finalConverted, "BRL")}`
+      : "";
     const messages = {
-      es: `Hola ${data.clientName}, te envío el presupuesto ${number} correspondiente a “${data.projectTitle}”.\n\nTotal: ${total}\nValidez: ${data.validDays} días.\n\nAdjunto el PDF con el alcance, los entregables y la forma de pago. Quedo atento a tu confirmación.`,
-      en: `Hello ${data.clientName}, I’m sending you quotation ${number} for “${data.projectTitle}”.\n\nTotal: ${total}\nValid for: ${data.validDays} days.\n\nThe attached PDF includes the scope, deliverables and payment terms. Please let me know if you would like to proceed.`,
-      pt: `Olá ${data.clientName}, estou enviando o orçamento ${number} referente a “${data.projectTitle}”.\n\nTotal: ${total}\nValidade: ${data.validDays} dias.\n\nO PDF anexo contém o escopo, os entregáveis e a forma de pagamento. Fico no aguardo da sua confirmação.`
+      es: `Hola ${data.clientName}, te envío el presupuesto ${number} correspondiente a “${data.projectTitle}”.\n\n${totalLabel}: ${total}${referenceLine}\nValidez: ${data.validDays} días.\n\nAdjunto el PDF con el alcance, los entregables y la forma de pago. Quedo atento a tu confirmación.`,
+      en: `Hello ${data.clientName}, I’m sending you quotation ${number} for “${data.projectTitle}”.\n\n${totalLabel}: ${total}${referenceLine}\nValid for: ${data.validDays} days.\n\nThe attached PDF includes the scope, deliverables and payment terms. Please let me know if you would like to proceed.`,
+      pt: `Olá ${data.clientName}, estou enviando o orçamento ${number} referente a “${data.projectTitle}”.\n\n${totalLabel}: ${total}${referenceLine}\nValidade: ${data.validDays} dias.\n\nO PDF anexo contém o escopo, os entregáveis e a forma de pagamento. Fico no aguardo da sua confirmação.`
     };
     return messages[data.language] || messages.en;
   }
