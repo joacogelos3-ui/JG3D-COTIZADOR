@@ -1,0 +1,337 @@
+<!doctype html>
+<html lang="es">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="robots" content="noindex,nofollow,noarchive">
+  <meta name="theme-color" content="#0b0b0d">
+  <title>JG3D · Cotizador interno</title>
+  <meta name="description" content="Cotizador interno de proyectos de modelado 3D de JG3D Works">
+  <link rel="preconnect" href="https://raw.githubusercontent.com">
+  <link rel="stylesheet" href="styles.css">
+  <script defer src="app.js"></script>
+</head>
+<body>
+  <div class="app-shell">
+    <aside class="sidebar" id="sidebar">
+      <div class="brand-block">
+        <img class="brand-logo" src="https://raw.githubusercontent.com/joacogelos3-ui/jg3dworks/main/assets/jg3d-logo.png" alt="JG3D Works">
+        <div>
+          <span class="eyebrow">HERRAMIENTA INTERNA</span>
+          <strong>Cotizador</strong>
+        </div>
+      </div>
+
+      <nav class="main-nav" aria-label="Navegación principal">
+        <button class="nav-item active" data-view="dashboard" type="button"><span>⌂</span> Panel</button>
+        <button class="nav-item" data-view="quote" type="button"><span>＋</span> Nuevo presupuesto</button>
+        <button class="nav-item" data-view="clients" type="button"><span>◎</span> Clientes</button>
+        <button class="nav-item" data-view="history" type="button"><span>≡</span> Presupuestos</button>
+        <button class="nav-item" data-view="settings" type="button"><span>⚙</span> Configuración</button>
+      </nav>
+
+      <div class="sidebar-footer">
+        <div class="status-dot"></div>
+        <div>
+          <strong>Modo prototipo</strong>
+          <span>Datos guardados en este dispositivo</span>
+        </div>
+      </div>
+    </aside>
+
+    <main class="main-content">
+      <header class="topbar">
+        <button class="mobile-menu" id="mobileMenu" type="button" aria-label="Abrir menú">☰</button>
+        <div>
+          <span class="eyebrow" id="pageEyebrow">RESUMEN</span>
+          <h1 id="pageTitle">Panel de trabajo</h1>
+        </div>
+        <div class="topbar-actions">
+          <span class="prototype-pill">PROTOTIPO</span>
+          <button class="avatar-button" type="button" title="Acceso pendiente de Supabase">JG</button>
+        </div>
+      </header>
+
+      <div class="prototype-notice">
+        <strong>Versión inicial de prueba.</strong>
+        No ingreses datos reales de clientes hasta que activemos el acceso seguro con Supabase.
+      </div>
+
+      <section class="view active" id="view-dashboard">
+        <div class="metrics-grid">
+          <article class="metric-card red-accent">
+            <span>Presupuestos totales</span>
+            <strong id="metricTotal">0</strong>
+            <small>Historial del dispositivo</small>
+          </article>
+          <article class="metric-card">
+            <span>En proceso</span>
+            <strong id="metricProgress">0</strong>
+            <small>Trabajos activos</small>
+          </article>
+          <article class="metric-card">
+            <span>Clientes guardados</span>
+            <strong id="metricClients">0</strong>
+            <small>Nuevos y existentes</small>
+          </article>
+          <article class="metric-card">
+            <span>Valor presupuestado</span>
+            <strong id="metricValue">USD 0</strong>
+            <small>Importe final acumulado</small>
+          </article>
+        </div>
+
+        <div class="dashboard-grid">
+          <article class="panel-card quick-start">
+            <div class="panel-heading">
+              <div>
+                <span class="eyebrow">ACCIÓN PRINCIPAL</span>
+                <h2>Crear un presupuesto</h2>
+              </div>
+              <span class="step-badge">01</span>
+            </div>
+            <p>Cargá el cliente, definí horas, dificultad y urgencia. El precio y la forma de pago se calculan automáticamente.</p>
+            <button class="primary-button" data-go="quote" type="button">Comenzar presupuesto <span>→</span></button>
+          </article>
+
+          <article class="panel-card">
+            <div class="panel-heading compact">
+              <div>
+                <span class="eyebrow">ÚLTIMOS MOVIMIENTOS</span>
+                <h2>Presupuestos recientes</h2>
+              </div>
+              <button class="text-button" data-go="history" type="button">Ver todos</button>
+            </div>
+            <div class="recent-list" id="recentQuotes">
+              <div class="empty-state small">
+                <span>◇</span>
+                <p>Todavía no hay presupuestos guardados.</p>
+              </div>
+            </div>
+          </article>
+        </div>
+
+        <article class="formula-strip">
+          <div><span class="formula-number">10</span><small>USD/h modelado</small></div>
+          <i>+</i>
+          <div><span class="formula-number">5</span><small>USD/h render</small></div>
+          <i>×</i>
+          <div><span class="formula-number">0 · 15 · 30%</span><small>Contingencia</small></div>
+          <i>×</i>
+          <div><span class="formula-number">0 · 20 · 40%</span><small>Urgencia</small></div>
+        </article>
+      </section>
+
+      <section class="view" id="view-quote">
+        <form id="quoteForm" class="quote-layout">
+          <div class="quote-form-column">
+            <article class="panel-card form-section">
+              <div class="section-title"><span>01</span><div><h2>Cliente y proyecto</h2><p>Información que aparecerá en el presupuesto.</p></div></div>
+              <div class="form-grid two">
+                <label>Cliente
+                  <select id="quoteClient"><option value="">Cliente ocasional / sin guardar</option></select>
+                </label>
+                <label>Tipo de cliente
+                  <select id="clientType"><option value="new">Nuevo</option><option value="existing">Existente</option></select>
+                </label>
+                <label>Nombre o empresa
+                  <input id="clientName" type="text" placeholder="Ej.: João Performance">
+                </label>
+                <label>País
+                  <select id="country"><option value="BR">Brasil</option><option value="US">Estados Unidos</option><option value="AR">Argentina</option><option value="OTHER">Otro país</option></select>
+                </label>
+                <label>Idioma
+                  <select id="language"><option value="pt">Português</option><option value="en">English</option><option value="es">Español</option></select>
+                </label>
+                <label>Moneda mostrada
+                  <select id="currency"><option value="USD">USD</option><option value="BRL">BRL</option><option value="ARS">ARS</option></select>
+                </label>
+                <label class="span-two">Título del proyecto
+                  <input id="projectTitle" type="text" required placeholder="Ej.: Panel FuelTech FT550 para VW Gol G3">
+                </label>
+                <label>Vehículo / aplicación
+                  <input id="vehicle" type="text" placeholder="Marca, modelo y año">
+                </label>
+                <label>Nicho
+                  <select id="niche"><option>Automóvil personal o de calle</option><option>Competición y automovilismo</option><option>Talleres, herramientas y gabaritos</option><option>Empresas, fabricación o reventa</option></select>
+                </label>
+                <label class="span-two">Alcance del trabajo
+                  <textarea id="scope" rows="4" placeholder="Describí qué se diseñará, compatibilidad, referencias y límites del trabajo."></textarea>
+                </label>
+              </div>
+
+              <div class="ai-box">
+                <div class="ai-icon">AI</div>
+                <div><strong>Análisis con IA</strong><p>Próxima etapa: pegar una conversación o adjuntar referencias para detectar requisitos faltantes y redactar el alcance.</p></div>
+                <button type="button" disabled>Próximamente</button>
+              </div>
+            </article>
+
+            <article class="panel-card form-section">
+              <div class="section-title"><span>02</span><div><h2>Cálculo técnico</h2><p>Las tarifas y porcentajes se pueden cambiar en Configuración.</p></div></div>
+              <div class="form-grid three">
+                <label>Horas de modelado
+                  <div class="input-suffix"><input id="modelHours" type="number" min="0" step="0.25" value="0"><span>h</span></div>
+                </label>
+                <label>Horas de render
+                  <div class="input-suffix"><input id="renderHours" type="number" min="0" step="0.25" value="0"><span>h</span></div>
+                </label>
+                <label>Dificultad
+                  <select id="difficulty"><option value="0">Baja · 0%</option><option value="15">Media · 15%</option><option value="30">Alta · 30%</option></select>
+                </label>
+                <label>Urgencia
+                  <select id="urgency"><option value="0">Normal · 7–10 días · 0%</option><option value="20">Prioridad · 4–6 días · 20%</option><option value="40">Urgente · 1–3 días · 40%</option></select>
+                </label>
+                <label>Personalización
+                  <select id="personalization"><option value="0">Sin personalización</option><option value="1">Logo / nombre · adicional fijo</option></select>
+                </label>
+                <label>Licencia comercial
+                  <div class="input-prefix"><span>USD</span><input id="licenseFee" type="number" min="0" step="1" value="0"></div>
+                </label>
+              </div>
+              <div class="risk-hints">
+                <label><input type="checkbox" id="riskReverse"> Ingeniería inversa y pruebas</label>
+                <label><input type="checkbox" id="riskGeometry"> Geometría o varias piezas</label>
+                <label><input type="checkbox" id="riskVariants"> Variantes o revisiones previstas</label>
+              </div>
+            </article>
+
+            <article class="panel-card form-section">
+              <div class="section-title"><span>03</span><div><h2>Entregables y condiciones</h2><p>Definí exactamente qué recibirá el cliente.</p></div></div>
+              <div class="deliverables-grid">
+                <label><input type="checkbox" name="deliverable" value="Archivo STL listo para imprimir" checked><span><strong>STL</strong><small>Listo para imprimir</small></span></label>
+                <label><input type="checkbox" name="deliverable" value="Archivo STEP o sólido exportado"><span><strong>STEP</strong><small>Sólido exportado</small></span></label>
+                <label><input type="checkbox" name="deliverable" value="Imágenes renderizadas"><span><strong>Render</strong><small>Imágenes finales</small></span></label>
+                <label><input type="checkbox" name="deliverable" value="Planos o instrucciones de montaje"><span><strong>Planos</strong><small>Montaje y detalles</small></span></label>
+              </div>
+              <div class="form-grid two top-gap">
+                <label>Rondas de correcciones menores
+                  <input id="revisions" type="number" min="0" step="1" value="1">
+                </label>
+                <label>Forma de cobro
+                  <select id="paymentMethod"><option value="paypal">PayPal</option><option value="other">Transferencia / otro medio</option></select>
+                </label>
+                <label>Tipo de cambio — 1 USD
+                  <div class="input-suffix"><input id="exchangeRate" type="number" min="0.0001" step="0.01" value="1"><span id="currencySuffix">USD</span></div>
+                </label>
+                <label>Validez
+                  <div class="input-suffix"><input id="validDays" type="number" min="1" step="1" value="7"><span>días</span></div>
+                </label>
+                <label class="span-two">Notas o condiciones adicionales
+                  <textarea id="notes" rows="3" placeholder="Ej.: las modificaciones fuera del alcance se cotizan por separado."></textarea>
+                </label>
+              </div>
+            </article>
+          </div>
+
+          <aside class="quote-summary-column">
+            <article class="price-card">
+              <span class="eyebrow">PRECIO CALCULADO</span>
+              <div class="price-main"><small id="displayCurrency">USD</small><strong id="finalPrice">0.00</strong></div>
+              <p id="priceSubtitle">Importe final para el cliente</p>
+              <div class="price-breakdown">
+                <div><span>Modelado</span><strong id="sumModel">USD 0.00</strong></div>
+                <div><span>Render</span><strong id="sumRender">USD 0.00</strong></div>
+                <div><span>Contingencia</span><strong id="sumDifficulty">USD 0.00</strong></div>
+                <div><span>Personalización</span><strong id="sumPersonalization">USD 0.00</strong></div>
+                <div><span>Urgencia</span><strong id="sumUrgency">USD 0.00</strong></div>
+                <div><span>Licencia comercial</span><strong id="sumLicense">USD 0.00</strong></div>
+                <div><span>Ajuste de cobro</span><strong id="sumPaymentFee">USD 0.00</strong></div>
+                <div class="net-row"><span>Neto deseado</span><strong id="sumNet">USD 0.00</strong></div>
+              </div>
+              <div class="payment-plan" id="paymentPlan"><span>Forma de pago</span><strong>100% antes de comenzar</strong></div>
+              <button class="primary-button full" id="saveQuote" type="submit">Guardar presupuesto</button>
+              <button class="secondary-button full" id="printPreview" type="button">Vista previa y PDF</button>
+            </article>
+          </aside>
+        </form>
+      </section>
+
+      <section class="view" id="view-clients">
+        <div class="split-heading">
+          <div><span class="eyebrow">BASE DE CLIENTES</span><h2>Clientes guardados</h2><p>La versión segura almacenará estos datos en Supabase.</p></div>
+          <button class="primary-button" id="newClientButton" type="button">＋ Nuevo cliente</button>
+        </div>
+        <div class="client-form panel-card hidden" id="clientFormCard">
+          <form id="clientForm" class="form-grid three">
+            <label>Nombre o empresa<input id="newClientName" required type="text"></label>
+            <label>País<select id="newClientCountry"><option value="BR">Brasil</option><option value="US">Estados Unidos</option><option value="AR">Argentina</option><option value="OTHER">Otro</option></select></label>
+            <label>Idioma<select id="newClientLanguage"><option value="pt">Português</option><option value="en">English</option><option value="es">Español</option></select></label>
+            <label>WhatsApp<input id="newClientPhone" type="text" placeholder="Con código de país"></label>
+            <label>Email<input id="newClientEmail" type="email"></label>
+            <label>Moneda preferida<select id="newClientCurrency"><option>USD</option><option>BRL</option><option>ARS</option></select></label>
+            <label class="span-three">Notas internas<textarea id="newClientNotes" rows="2"></textarea></label>
+            <div class="form-actions span-three"><button class="secondary-button" id="cancelClient" type="button">Cancelar</button><button class="primary-button" type="submit">Guardar cliente</button></div>
+          </form>
+        </div>
+        <div class="table-card">
+          <div class="table-toolbar"><input id="clientSearch" type="search" placeholder="Buscar cliente…"><span id="clientCount">0 clientes</span></div>
+          <div class="responsive-table"><table><thead><tr><th>Cliente</th><th>País</th><th>Idioma</th><th>Contacto</th><th>Presupuestos</th><th></th></tr></thead><tbody id="clientsTable"></tbody></table></div>
+          <div class="empty-state" id="clientsEmpty"><span>◎</span><h3>No hay clientes guardados</h3><p>Agregá el primero para reutilizar sus datos en futuros presupuestos.</p></div>
+        </div>
+      </section>
+
+      <section class="view" id="view-history">
+        <div class="split-heading">
+          <div><span class="eyebrow">SEGUIMIENTO</span><h2>Presupuestos y trabajos</h2><p>Flujo: borrador, enviado, aceptado, en proceso, terminado y entregado.</p></div>
+          <button class="primary-button" data-go="quote" type="button">＋ Crear presupuesto</button>
+        </div>
+        <div class="table-card">
+          <div class="table-toolbar"><input id="quoteSearch" type="search" placeholder="Buscar proyecto o cliente…"><select id="statusFilter"><option value="all">Todos los estados</option><option value="draft">Borrador</option><option value="sent">Enviado</option><option value="accepted">Aceptado</option><option value="progress">En proceso</option><option value="finished">Terminado</option><option value="delivered">Entregado</option></select></div>
+          <div class="responsive-table"><table><thead><tr><th>Número</th><th>Proyecto</th><th>Cliente</th><th>Total</th><th>Estado</th><th>Fecha</th><th></th></tr></thead><tbody id="quotesTable"></tbody></table></div>
+          <div class="empty-state" id="quotesEmpty"><span>≡</span><h3>No hay presupuestos guardados</h3><p>Los presupuestos que crees aparecerán aquí.</p></div>
+        </div>
+      </section>
+
+      <section class="view" id="view-settings">
+        <div class="split-heading"><div><span class="eyebrow">REGLAS DEL NEGOCIO</span><h2>Configuración del cotizador</h2><p>Estos valores controlan todos los cálculos nuevos.</p></div></div>
+        <form id="settingsForm" class="settings-grid">
+          <article class="panel-card form-section">
+            <h3>Tarifas y adicionales</h3>
+            <div class="form-grid two">
+              <label>Modelado por hora<div class="input-prefix"><span>USD</span><input id="settingModelRate" type="number" min="0" step="0.01"></div></label>
+              <label>Render por hora<div class="input-prefix"><span>USD</span><input id="settingRenderRate" type="number" min="0" step="0.01"></div></label>
+              <label>Personalización fija<div class="input-prefix"><span>USD</span><input id="settingPersonalization" type="number" min="0" step="0.01"></div></label>
+              <label>Dividir pago desde<div class="input-prefix"><span>USD</span><input id="settingPaymentThreshold" type="number" min="0" step="1"></div></label>
+            </div>
+          </article>
+          <article class="panel-card form-section">
+            <h3>PayPal y condiciones</h3>
+            <div class="form-grid two">
+              <label>Comisión porcentual<div class="input-suffix"><input id="settingPaypalPercent" type="number" min="0" max="99" step="0.01"><span>%</span></div></label>
+              <label>Tarifa fija por operación<div class="input-prefix"><span>USD</span><input id="settingPaypalFixed" type="number" min="0" step="0.01"></div></label>
+              <label>Validez predeterminada<div class="input-suffix"><input id="settingValidDays" type="number" min="1" step="1"><span>días</span></div></label>
+              <label>Próximo número<input id="settingNextNumber" type="number" min="1" step="1"></label>
+            </div>
+          </article>
+          <article class="panel-card form-section span-settings">
+            <h3>Conversiones manuales de respaldo</h3>
+            <p class="section-copy">Cuando conectemos la cotización automática, estos valores seguirán disponibles para corregir el importe.</p>
+            <div class="form-grid three">
+              <label>1 USD en USD<input id="settingUsdRate" type="number" min="0.0001" step="0.01"></label>
+              <label>1 USD en BRL<input id="settingBrlRate" type="number" min="0.0001" step="0.01"></label>
+              <label>1 USD en ARS<input id="settingArsRate" type="number" min="0.0001" step="0.01"></label>
+            </div>
+          </article>
+          <div class="settings-actions span-settings"><button class="secondary-button" id="resetSettings" type="button">Restaurar valores</button><button class="primary-button" type="submit">Guardar configuración</button></div>
+        </form>
+      </section>
+    </main>
+  </div>
+
+  <div class="modal-backdrop" id="previewModal" aria-hidden="true">
+    <div class="modal-window preview-window" role="dialog" aria-modal="true" aria-labelledby="previewTitle">
+      <div class="modal-header"><div><span class="eyebrow">DOCUMENTO PARA EL CLIENTE</span><h2 id="previewTitle">Vista previa del presupuesto</h2></div><button class="icon-button" id="closePreview" type="button" aria-label="Cerrar">×</button></div>
+      <div class="preview-scroll">
+        <article class="quote-document" id="quoteDocument"></article>
+      </div>
+      <div class="modal-actions">
+        <button class="secondary-button" id="copyWhatsapp" type="button">Copiar mensaje de WhatsApp</button>
+        <button class="primary-button" id="printQuote" type="button">Imprimir / Guardar PDF</button>
+      </div>
+    </div>
+  </div>
+
+  <div class="toast" id="toast" role="status" aria-live="polite"></div>
+</body>
+</html>
