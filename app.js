@@ -30,6 +30,29 @@
 
   const countries = { BR: "Brasil", US: "Estados Unidos", AR: "Argentina", OTHER: "Otro país" };
   const languageLabels = { es: "Español", en: "English", pt: "Português" };
+  const documentLocales = { es: "es-AR", en: "en-US", pt: "pt-BR" };
+  const documentCountries = {
+    BR: { es: "Brasil", en: "Brazil", pt: "Brasil" },
+    US: { es: "Estados Unidos", en: "United States", pt: "Estados Unidos" },
+    AR: { es: "Argentina", en: "Argentina", pt: "Argentina" },
+    OTHER: { es: "Otro país", en: "Other country", pt: "Outro país" }
+  };
+  const documentNiches = {
+    street: { es: "Automóvil personal o de calle", en: "Personal or street car", pt: "Carro pessoal ou de rua" },
+    motorsport: { es: "Competición y automovilismo", en: "Competition and motorsport", pt: "Competição e automobilismo" },
+    workshop: { es: "Talleres, herramientas y gabaritos", en: "Workshops, tools and assembly jigs", pt: "Oficinas, ferramentas e gabaritos" },
+    business: { es: "Empresas, fabricación o reventa", en: "Business, manufacturing or resale", pt: "Empresas, fabricação ou revenda" }
+  };
+  const documentDeliverables = {
+    stl: { es: "Archivo STL listo para imprimir", en: "Print-ready STL file", pt: "Arquivo STL pronto para impressão" },
+    step: { es: "Archivo STEP o sólido exportado", en: "STEP file or exported solid model", pt: "Arquivo STEP ou sólido exportado" },
+    renders: { es: "Imágenes renderizadas", en: "Rendered images", pt: "Imagens renderizadas" },
+    drawings: { es: "Planos o instrucciones de montaje", en: "Drawings or assembly instructions", pt: "Desenhos técnicos ou instruções de montagem" }
+  };
+  const documentPaymentMethods = {
+    paypal: { es: "PayPal", en: "PayPal", pt: "PayPal" },
+    other: { es: "Transferencia u otro medio", en: "Bank transfer or other method", pt: "Transferência ou outro meio" }
+  };
   const logoUrl = "https://raw.githubusercontent.com/joacogelos3-ui/jg3dworks/main/assets/jg3d-logo.png";
   const cloudConfig = window.JG3D_SUPABASE || null;
   const cloudClient = cloudConfig && window.supabase
@@ -159,6 +182,22 @@
 
   function dateLabel(iso) {
     return new Intl.DateTimeFormat("es-AR", { day: "2-digit", month: "2-digit", year: "numeric" }).format(new Date(iso));
+  }
+
+  function documentDateLabel(iso, language = "en") {
+    return new Intl.DateTimeFormat(documentLocales[language] || documentLocales.en, {
+      day: "2-digit",
+      month: "2-digit",
+      year: "numeric"
+    }).format(new Date(iso));
+  }
+
+  function translatedDocumentValue(dictionary, value, language = "en") {
+    const direct = dictionary[value];
+    if (direct) return direct[language] || direct.en || value;
+
+    const legacy = Object.values(dictionary).find(translations => Object.values(translations).includes(value));
+    return legacy ? (legacy[language] || legacy.en || value) : value;
   }
 
   function escapeHtml(value = "") {
@@ -404,6 +443,7 @@
     const data = record.data || record;
     const number = record.number || quoteNumber();
     const createdAt = record.createdAt || new Date().toISOString();
+    const documentLanguage = ["es", "en", "pt"].includes(data.language) ? data.language : "en";
     const labels = {
       es: {
         quote: "Presupuesto", client: "Cliente", country: "País", application: "Aplicación", delivery: "Plazo", validity: "Válido hasta", scope: "Alcance del trabajo", deliverables: "Entregables", conditions: "Condiciones", total: "Precio final", paypalTotal: "Total a pagar por PayPal", reference: "Referencia aproximada en reales", payment: "Forma de pago", revisions: "correcciones menores incluidas", normal: "Normal · 2-4 días", priority: "Prioridad · 1-2 días", urgent: "Urgente · mismo día / pocas horas", origin: "Argentina · Entrega digital mundial", contact: "Contacto directo", footer: "Diseño y modelado 3D automotriz"
@@ -414,7 +454,7 @@
       pt: {
         quote: "Orçamento", client: "Cliente", country: "País", application: "Aplicação", delivery: "Prazo", validity: "Válido até", scope: "Escopo do trabalho", deliverables: "Entregáveis", conditions: "Condições", total: "Preço final", paypalTotal: "Total a pagar via PayPal", reference: "Referência aproximada em reais", payment: "Forma de pagamento", revisions: "rodadas de ajustes menores incluídas", normal: "Normal · 2-4 dias", priority: "Prioridade · 1-2 dias", urgent: "Urgente · no mesmo dia / poucas horas", origin: "Argentina · Entrega digital mundial", contact: "Contato direto", footer: "Design e modelagem 3D automotiva"
       }
-    }[data.language] || null;
+    }[documentLanguage];
     const urgencyText = data.urgencyPercent === 40 ? labels.urgent : data.urgencyPercent === 20 ? labels.priority : labels.normal;
     const brazilPaypal = data.country === "BR" && data.paymentMethod === "paypal";
     const payableTotal = brazilPaypal ? data.calculation.grossUsd : data.calculation.finalConverted;
@@ -424,8 +464,13 @@
       ? `50% (${brazilPaypal ? moneyWithCode(payableTotal / 2, "USD") : money(payableTotal / 2, payableCurrency)}) + 50% (${brazilPaypal ? moneyWithCode(payableTotal / 2, "USD") : money(payableTotal / 2, payableCurrency)})`
       : `100% ${payableText}`;
     const brlReference = brazilPaypal ? money(data.calculation.finalConverted, "BRL") : "";
-    const scope = data.scope || (data.language === "pt" ? "Modelagem 3D conforme as referências e medidas fornecidas pelo cliente." : data.language === "en" ? "3D modeling according to the references and measurements supplied by the client." : "Modelado 3D según las referencias y medidas suministradas por el cliente.");
-    const defaultCondition = data.language === "pt" ? "Alterações fora do escopo e revisões adicionais serão orçadas separadamente." : data.language === "en" ? "Changes outside the agreed scope and additional revisions will be quoted separately." : "Los cambios fuera del alcance y las revisiones adicionales se cotizarán por separado.";
+    const scope = data.scope || (documentLanguage === "pt" ? "Modelagem 3D conforme as referências e medidas fornecidas pelo cliente." : documentLanguage === "en" ? "3D modeling according to the references and measurements supplied by the client." : "Modelado 3D según las referencias y medidas suministradas por el cliente.");
+    const defaultCondition = documentLanguage === "pt" ? "Alterações fora do escopo e revisões adicionais serão orçadas separadamente." : documentLanguage === "en" ? "Changes outside the agreed scope and additional revisions will be quoted separately." : "Los cambios fuera del alcance y las revisiones adicionales se cotizarán por separado.";
+    const countryText = translatedDocumentValue(documentCountries, data.country, documentLanguage);
+    const applicationText = data.vehicle || translatedDocumentValue(documentNiches, data.niche, documentLanguage);
+    const deliverables = (Array.isArray(data.deliverables) && data.deliverables.length ? data.deliverables : ["stl"])
+      .map(item => translatedDocumentValue(documentDeliverables, item, documentLanguage));
+    const paymentMethodText = translatedDocumentValue(documentPaymentMethods, data.paymentMethod, documentLanguage);
 
     return `
       <div class="doc-watermark" aria-hidden="true"><img src="${logoUrl}" alt=""></div>
@@ -433,22 +478,22 @@
         <div class="doc-brand">
           <img class="doc-logo" src="${logoUrl}" alt="JG3D Works">
         </div>
-        <div class="doc-meta"><span>${labels.quote}</span><h2>${escapeHtml(number)}</h2><p>${dateLabel(createdAt)}</p></div>
+        <div class="doc-meta"><span>${labels.quote}</span><h2>${escapeHtml(number)}</h2><p>${documentDateLabel(createdAt, documentLanguage)}</p></div>
       </header>
       <span class="doc-kicker">JG3D WORKS · ${labels.quote}</span>
       <h1 class="doc-title">${escapeHtml(data.projectTitle)}</h1>
       <div class="doc-grid">
         <div class="doc-field"><span>${labels.client}</span><strong>${escapeHtml(data.clientName)}</strong></div>
-        <div class="doc-field"><span>${labels.country}</span><strong>${escapeHtml(countries[data.country] || data.country)}</strong></div>
-        <div class="doc-field"><span>${labels.application}</span><strong>${escapeHtml(data.vehicle || data.niche)}</strong></div>
+        <div class="doc-field"><span>${labels.country}</span><strong>${escapeHtml(countryText)}</strong></div>
+        <div class="doc-field"><span>${labels.application}</span><strong>${escapeHtml(applicationText)}</strong></div>
         <div class="doc-field"><span>${labels.delivery}</span><strong>${urgencyText}</strong></div>
-        <div class="doc-field"><span>${labels.validity}</span><strong>${dateLabel(data.validUntil)}</strong></div>
+        <div class="doc-field"><span>${labels.validity}</span><strong>${documentDateLabel(data.validUntil, documentLanguage)}</strong></div>
         <div class="doc-field"><span>${labels.payment}</span><strong>${paymentText}</strong></div>
       </div>
       <section class="doc-section"><h3>${labels.scope}</h3><p>${escapeHtml(scope).replace(/\n/g, "<br>")}</p></section>
-      <section class="doc-section"><h3>${labels.deliverables}</h3><ul>${(data.deliverables.length ? data.deliverables : ["Archivo STL listo para imprimir"]).map(item => `<li>${escapeHtml(item)}</li>`).join("")}</ul></section>
-      <section class="doc-section"><h3>${labels.conditions}</h3><ul><li>${data.revisions} ${labels.revisions}.</li><li>${escapeHtml(data.notes || defaultCondition)}</li><li>${data.language === "pt" ? "A entrega dos arquivos finais é realizada após a confirmação do pagamento." : data.language === "en" ? "Final files are delivered after payment confirmation." : "Los archivos finales se entregan después de confirmar el pago."}</li></ul></section>
-      <div class="doc-total"><div><span>${brazilPaypal ? labels.paypalTotal : labels.total}</span><strong>${payableText}</strong>${brazilPaypal ? `<small class="doc-price-reference">${labels.reference}: ${brlReference}</small>` : ""}</div><div class="doc-payment"><span>${labels.payment}</span><p>${paymentText}<br>${data.paymentMethod === "paypal" ? "PayPal" : escapeHtml(data.paymentMethod)}</p></div></div>
+      <section class="doc-section"><h3>${labels.deliverables}</h3><ul>${deliverables.map(item => `<li>${escapeHtml(item)}</li>`).join("")}</ul></section>
+      <section class="doc-section"><h3>${labels.conditions}</h3><ul><li>${data.revisions} ${labels.revisions}.</li><li>${escapeHtml(data.notes || defaultCondition)}</li><li>${documentLanguage === "pt" ? "A entrega dos arquivos finais é realizada após a confirmação do pagamento." : documentLanguage === "en" ? "Final files are delivered after payment confirmation." : "Los archivos finales se entregan después de confirmar el pago."}</li></ul></section>
+      <div class="doc-total"><div><span>${brazilPaypal ? labels.paypalTotal : labels.total}</span><strong>${payableText}</strong>${brazilPaypal ? `<small class="doc-price-reference">${labels.reference}: ${brlReference}</small>` : ""}</div><div class="doc-payment"><span>${labels.payment}</span><p>${paymentText}<br>${escapeHtml(paymentMethodText)}</p></div></div>
       <footer class="doc-footer">
         <div class="doc-footer-top">
           <div class="doc-origin">
