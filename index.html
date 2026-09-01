@@ -181,7 +181,7 @@
                   <input id="vehicle" type="text" placeholder="Marca, modelo y año">
                 </label>
                 <label>Nicho
-                  <select id="niche"><option>Automóvil personal o de calle</option><option>Competición y automovilismo</option><option>Talleres, herramientas y gabaritos</option><option>Empresas, fabricación o reventa</option></select>
+                  <select id="niche"><option value="street">Automóvil personal o de calle</option><option value="motorsport">Competición y automovilismo</option><option value="workshop">Talleres, herramientas y gabaritos</option><option value="business">Empresas, fabricación o reventa</option></select>
                 </label>
                 <label class="span-two">Alcance del trabajo
                   <textarea id="scope" rows="4" placeholder="Describí qué se diseñará, compatibilidad, referencias y límites del trabajo."></textarea>
@@ -227,10 +227,10 @@
             <article class="panel-card form-section">
               <div class="section-title"><span>03</span><div><h2>Entregables y condiciones</h2><p>Definí exactamente qué recibirá el cliente.</p></div></div>
               <div class="deliverables-grid">
-                <label><input type="checkbox" name="deliverable" value="Archivo STL listo para imprimir" checked><span><strong>STL</strong><small>Listo para imprimir</small></span></label>
-                <label><input type="checkbox" name="deliverable" value="Archivo STEP o sólido exportado"><span><strong>STEP</strong><small>Sólido exportado</small></span></label>
-                <label><input type="checkbox" name="deliverable" value="Imágenes renderizadas"><span><strong>Render</strong><small>Imágenes finales</small></span></label>
-                <label><input type="checkbox" name="deliverable" value="Planos o instrucciones de montaje"><span><strong>Planos</strong><small>Montaje y detalles</small></span></label>
+                <label><input type="checkbox" name="deliverable" value="stl" checked><span><strong>STL</strong><small>Listo para imprimir</small></span></label>
+                <label><input type="checkbox" name="deliverable" value="step"><span><strong>STEP</strong><small>Sólido exportado</small></span></label>
+                <label><input type="checkbox" name="deliverable" value="renders"><span><strong>Render</strong><small>Imágenes finales</small></span></label>
+                <label><input type="checkbox" name="deliverable" value="drawings"><span><strong>Planos</strong><small>Montaje y detalles</small></span></label>
               </div>
               <div class="form-grid two top-gap">
                 <label>Rondas de correcciones menores
