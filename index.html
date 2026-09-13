@@ -8,10 +8,10 @@
   <title>JG3D · Cotizador interno</title>
   <meta name="description" content="Cotizador interno de proyectos de modelado 3D de JG3D Works">
   <link rel="preconnect" href="https://raw.githubusercontent.com">
-  <link rel="stylesheet" href="styles.css">
+  <link rel="stylesheet" href="styles.css?v=20260913-client-a4">
   <script defer src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.min.js"></script>
   <script defer src="supabase-config.js"></script>
-  <script defer src="app.js"></script>
+  <script defer src="app.js?v=20260913-client-a4"></script>
 </head>
 <body>
   <section class="auth-gate" id="authGate" aria-labelledby="authTitle">
@@ -157,13 +157,20 @@
               <div class="section-title"><span>01</span><div><h2>Cliente y proyecto</h2><p>Información que aparecerá en el presupuesto.</p></div></div>
               <div class="form-grid two">
                 <label>Cliente
-                  <select id="quoteClient"><option value="">Cliente ocasional / sin guardar</option></select>
+                  <select id="quoteClient"><option value="">Nuevo cliente / ingresar datos</option></select>
                 </label>
                 <label>Tipo de cliente
                   <select id="clientType"><option value="new">Nuevo</option><option value="existing">Existente</option></select>
+                  <small>El cliente nuevo se guarda al guardar el presupuesto.</small>
                 </label>
                 <label>Nombre o empresa
-                  <input id="clientName" type="text" placeholder="Ej.: João Performance">
+                  <input id="clientName" type="text" required placeholder="Ej.: João Performance">
+                </label>
+                <label>WhatsApp del cliente (opcional)
+                  <input id="clientPhone" type="tel" placeholder="Con código de país">
+                </label>
+                <label>Email del cliente (opcional)
+                  <input id="clientEmail" type="email" placeholder="cliente@empresa.com">
                 </label>
                 <label>País
                   <select id="country"><option value="BR">Brasil</option><option value="US">Estados Unidos</option><option value="AR">Argentina</option><option value="OTHER">Otro país</option></select>
@@ -305,9 +312,9 @@
           <button class="primary-button" data-go="quote" type="button">＋ Crear presupuesto</button>
         </div>
         <div class="table-card">
-          <div class="table-toolbar"><input id="quoteSearch" type="search" placeholder="Buscar proyecto o cliente…"><select id="statusFilter"><option value="all">Todos los estados</option><option value="draft">Borrador</option><option value="sent">Enviado</option><option value="accepted">Aceptado</option><option value="progress">En proceso</option><option value="finished">Terminado</option><option value="delivered">Entregado</option></select></div>
+          <div class="table-toolbar"><input id="quoteSearch" type="search" placeholder="Buscar proyecto o cliente…"><select id="historyClientFilter" aria-label="Filtrar presupuestos por cliente"><option value="all">Todos los clientes</option></select><select id="statusFilter"><option value="all">Todos los estados</option><option value="draft">Borrador</option><option value="sent">Enviado</option><option value="accepted">Aceptado</option><option value="progress">En proceso</option><option value="finished">Terminado</option><option value="delivered">Entregado</option></select></div>
           <div class="responsive-table"><table><thead><tr><th>Número</th><th>Proyecto</th><th>Cliente</th><th>Total</th><th>Estado</th><th>Fecha</th><th></th></tr></thead><tbody id="quotesTable"></tbody></table></div>
-          <div class="empty-state" id="quotesEmpty"><span>≡</span><h3>No hay presupuestos guardados</h3><p>Los presupuestos que crees aparecerán aquí.</p></div>
+          <div class="empty-state" id="quotesEmpty"><span>≡</span><h3>No hay presupuestos para esta selección</h3><p>Revisá los filtros o creá un nuevo presupuesto.</p></div>
         </div>
       </section>
 
@@ -355,7 +362,7 @@
       </div>
       <div class="modal-actions">
         <button class="secondary-button" id="copyWhatsapp" type="button">Copiar mensaje de WhatsApp</button>
-        <button class="primary-button" id="printQuote" type="button">Imprimir / Guardar PDF</button>
+        <button class="primary-button" id="printQuote" type="button">Imprimir / Guardar PDF A4</button>
       </div>
     </div>
   </div>

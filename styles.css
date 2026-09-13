@@ -305,6 +305,8 @@ td select { min-width: 116px; height: 32px; margin: 0; font-size: 9px; }
 .row-actions { display: flex; justify-content: flex-end; gap: 7px; }
 .row-button { min-width: 30px; height: 30px; border: 1px solid var(--line); border-radius: 8px; background: var(--surface-2); color: var(--muted); font-size: 10px; }
 .row-button.danger:hover { border-color: rgba(241,37,45,.4); color: var(--red); }
+.client-history-button { padding: 0 10px; white-space: nowrap; color: var(--text); }
+.client-history-button:hover { border-color: var(--red); color: var(--red); }
 
 .empty-state { display: grid; place-items: center; padding: 54px 20px; text-align: center; }
 .empty-state.small { min-height: 190px; padding: 20px; }
@@ -424,10 +426,40 @@ td select { min-width: 116px; height: 32px; margin: 0; font-size: 9px; }
   .modal-actions button { width: 100%; }
 }
 
+.quote-print-sheet {
+  position: fixed; top: 0; left: -10000px;
+  width: 210mm; height: 296.8mm; padding: 12mm;
+  margin: 0; overflow: hidden; pointer-events: none;
+  background: #fff; color: #151518; color-scheme: light;
+  -webkit-print-color-adjust: exact; print-color-adjust: exact;
+}
+.quote-print-sheet .quote-document {
+  position: absolute; top: 12mm; left: 12mm; width: 186mm;
+  min-height: 0; height: auto; margin: 0; padding: 0;
+  overflow: visible; box-shadow: none; transform-origin: top left;
+}
+.quote-print-sheet .doc-logo { width: 154px; height: 82px; }
+.quote-print-sheet .doc-meta { min-width: 180px; padding: 13px 16px; }
+.quote-print-sheet .doc-grid { grid-template-columns: repeat(2, minmax(0,1fr)); }
+.quote-print-sheet .doc-footer-top { flex-direction: row; align-items: center; }
+.quote-print-sheet .doc-links { justify-content: flex-end; }
+.quote-print-sheet .doc-title,
+.quote-print-sheet .doc-field strong,
+.quote-print-sheet .doc-section p,
+.quote-print-sheet .doc-section li { overflow-wrap: anywhere; }
+
 @media print {
-  body * { visibility: hidden !important; }
-  #quoteDocument, #quoteDocument * { visibility: visible !important; }
-  #quoteDocument { position: absolute; inset: 0; width: 100%; min-height: 297mm; margin: 0; padding: 13mm; box-shadow: none; }
-  #quoteDocument a { color: inherit; text-decoration: none; }
-  @page { size: A4; margin: 0; }
+  @page { size: A4 portrait; margin: 0; }
+  html, body {
+    width: 210mm; min-width: 0; min-height: 0; height: auto;
+    margin: 0 !important; padding: 0 !important;
+    overflow: visible !important; background: #fff; color-scheme: light;
+  }
+  body > * { display: none !important; }
+  body::before, body::after { display: none !important; }
+  #quotePrintSheet {
+    display: block !important; position: relative; top: auto; left: auto;
+    width: 210mm; height: 296.8mm; margin: 0; border: 0;
+    break-inside: avoid; break-after: auto;
+  }
 }

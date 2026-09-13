@@ -142,11 +142,14 @@
         ...(data.settings || {}),
         rates: { ...defaults.rates, ...((data.settings || {}).rates || {}) }
       };
+      const repaired = restoreQuoteClientLinks();
       persist();
       suppressCloudSync = false;
+      if (repaired) await saveWorkspaceNow();
       return "loaded";
     }
 
+    restoreQuoteClientLinks();
     await saveWorkspaceNow();
     return "migrated";
   }
@@ -373,6 +376,8 @@
       clientId: $("#quoteClient").value,
       clientType: $("#clientType").value,
       clientName: $("#clientName").value.trim() || "Cliente",
+      clientPhone: $("#clientPhone").value.trim(),
+      clientEmail: $("#clientEmail").value.trim(),
       country: $("#country").value,
       language: $("#language").value,
       currency,
@@ -519,6 +524,7 @@
   }
 
   function openPreview(record = null) {
+    $("#quotePrintSheet")?.remove();
     currentPreview = record || { number: quoteNumber(), createdAt: new Date().toISOString(), data: getQuoteData() };
     $("#quoteDocument").innerHTML = buildDocument(currentPreview);
     $("#previewModal").classList.add("open");
@@ -526,8 +532,65 @@
   }
 
   function closePreview() {
+    $("#quotePrintSheet")?.remove();
     $("#previewModal").classList.remove("open");
     $("#previewModal").setAttribute("aria-hidden", "true");
+  }
+
+  function prepareQuotePrint() {
+    if (!currentPreview) return null;
+    let sheet = $("#quotePrintSheet");
+    if (!sheet) {
+      sheet = document.createElement("div");
+      sheet.id = "quotePrintSheet";
+      sheet.className = "quote-print-sheet";
+      sheet.setAttribute("aria-hidden", "true");
+      const content = document.createElement("article");
+      content.className = "quote-document";
+      content.lang = currentPreview.data?.language || currentPreview.language || "en";
+      content.innerHTML = buildDocument(currentPreview);
+      sheet.appendChild(content);
+      document.body.appendChild(sheet);
+    }
+    fitQuotePrint(sheet);
+    return sheet;
+  }
+
+  function fitQuotePrint(sheet) {
+    const content = $(".quote-document", sheet);
+    content.style.transform = "none";
+    const sheetStyle = getComputedStyle(sheet);
+    const padding = parseFloat(sheetStyle.paddingTop);
+    const availableHeight = sheet.clientHeight - padding - parseFloat(sheetStyle.paddingBottom) - 2;
+    const availableWidth = sheet.clientWidth - parseFloat(sheetStyle.paddingLeft) - parseFloat(sheetStyle.paddingRight);
+    // Measure the actual document, not the deliberately oversized decorative watermark.
+    const naturalHeight = content.offsetHeight || content.scrollHeight;
+    const naturalWidth = content.offsetWidth || content.scrollWidth;
+    const scale = Math.min(1, availableHeight / naturalHeight, availableWidth / naturalWidth);
+    content.style.transform = `scale(${scale})`;
+    content.style.left = `${parseFloat(sheetStyle.paddingLeft) + availableWidth * (1 - scale) / 2}px`;
+    sheet.dataset.scale = String(scale);
+  }
+
+  async function printQuote() {
+    const button = $("#printQuote");
+    button.disabled = true;
+    try {
+      const sheet = prepareQuotePrint();
+      if (!sheet) return;
+      if (document.fonts) await document.fonts.ready;
+      await Promise.all($$("img", sheet).map(img => Promise.race([
+        img.decode().catch(() => {}),
+        new Promise(resolve => setTimeout(resolve, 2500))
+      ])));
+      fitQuotePrint(sheet);
+      if (Number(sheet.dataset.scale) < .75) {
+        toast("El texto es extenso: se ajustará a una hoja A4. Revisá su legibilidad en la vista de impresión.");
+      }
+      window.print();
+    } finally {
+      button.disabled = false;
+    }
   }
 
   function whatsappMessage(record) {
@@ -566,16 +629,27 @@
       toast("Ingresá un título para el proyecto.");
       return;
     }
+    if (!$("#clientName").value.trim()) {
+      $("#clientName").focus();
+      toast("Ingresá el nombre o empresa del cliente.");
+      return;
+    }
+    const data = getQuoteData();
+    if (!linkQuoteClient(data)) return;
     const record = {
       id: uid("quote"),
       number: quoteNumber(),
       createdAt: new Date().toISOString(),
       status: "draft",
-      data: getQuoteData()
+      data
     };
     quotes.unshift(record);
     settings.nextNumber += 1;
     persist();
+    populateClientSelect();
+    $("#quoteClient").value = data.clientId;
+    $("#clientType").value = "existing";
+    renderClients();
     renderDashboard();
     renderQuotes();
     openPreview(record);
@@ -614,19 +688,93 @@
   function populateClientSelect() {
     const select = $("#quoteClient");
     const previous = select.value;
-    select.innerHTML = '<option value="">Cliente ocasional / sin guardar</option>' + clients.map(client => `<option value="${client.id}">${escapeHtml(client.name)}</option>`).join("");
+    select.innerHTML = '<option value="">Nuevo cliente / ingresar datos</option>' + clients.map(client => `<option value="${escapeHtml(client.id)}">${escapeHtml(client.name)}</option>`).join("");
     if (clients.some(client => client.id === previous)) select.value = previous;
+    const historySelect = $("#historyClientFilter");
+    const previousHistory = historySelect.value;
+    historySelect.innerHTML = '<option value="all">Todos los clientes</option>' + clients.map(client => `<option value="${escapeHtml(client.id)}">${escapeHtml(client.name)}</option>`).join("");
+    if (clients.some(client => client.id === previousHistory)) historySelect.value = previousHistory;
   }
 
   function selectClient() {
     const client = clients.find(item => item.id === $("#quoteClient").value);
-    if (!client) return;
+    if (!client) {
+      $("#clientType").value = "new";
+      $("#clientName").value = "";
+      $("#clientPhone").value = "";
+      $("#clientEmail").value = "";
+      return;
+    }
     $("#clientType").value = "existing";
     $("#clientName").value = client.name;
+    $("#clientPhone").value = client.phone || "";
+    $("#clientEmail").value = client.email || "";
     $("#country").value = client.country;
     $("#language").value = client.language;
     $("#currency").value = client.currency;
     setCurrencyRate();
+  }
+
+  function matchingClients(name, country) {
+    const normalized = String(name || "").normalize("NFKC").trim().replace(/\s+/g, " ").toLowerCase();
+    return clients.filter(client => client.country === country &&
+      String(client.name || "").normalize("NFKC").trim().replace(/\s+/g, " ").toLowerCase() === normalized);
+  }
+
+  function createClientFromQuote(data, createdAt = new Date().toISOString()) {
+    const client = {
+      id: uid("client"), createdAt, name: data.clientName.trim(),
+      country: data.country, language: data.language, currency: data.currency,
+      phone: data.clientPhone || "", email: data.clientEmail || "", notes: ""
+    };
+    clients.unshift(client);
+    return client;
+  }
+
+  function linkQuoteClient(data) {
+    const selected = data.clientType === "existing" && clients.find(client => client.id === data.clientId);
+    const matches = selected ? [] : matchingClients(data.clientName, data.country);
+    let client = selected || (matches.length === 1 ? matches[0] : null);
+    if (!client && data.clientType === "existing") {
+      toast("Seleccioná el cliente guardado para vincular su presupuesto.");
+      $("#quoteClient").focus();
+      return false;
+    }
+    if (!client && matches.length > 1) {
+      toast("Hay varios clientes con ese nombre. Seleccioná la ficha correcta en Cliente.");
+      $("#quoteClient").focus();
+      return false;
+    }
+    if (!client) client = createClientFromQuote(data);
+    data.clientId = client.id;
+    return true;
+  }
+
+  function restoreQuoteClientLinks() {
+    let repaired = 0;
+    for (const record of quotes) {
+      const data = record.data;
+      // Keep intentional deletions and explicit links intact; never guess among duplicate names.
+      if (!data || data.clientId || !data.clientName?.trim() || data.clientName === "Cliente") continue;
+      const matches = matchingClients(data.clientName, data.country);
+      let client = matches.length === 1 ? matches[0] : null;
+      if (!client && matches.length === 0 && data.clientType === "new") {
+        client = createClientFromQuote(data, record.createdAt);
+      }
+      if (client) {
+        data.clientId = client.id;
+        repaired += 1;
+      }
+    }
+    return repaired;
+  }
+
+  function openClientHistory(id) {
+    if (!clients.some(client => client.id === id)) return;
+    $("#historyClientFilter").value = id;
+    $("#quoteSearch").value = "";
+    $("#statusFilter").value = "all";
+    navigate("history");
   }
 
   function saveClient(event) {
@@ -642,7 +790,13 @@
       currency: $("#newClientCurrency").value,
       notes: $("#newClientNotes").value.trim()
     };
+    if (!client.name) {
+      $("#newClientName").focus();
+      toast("Ingresá el nombre del cliente.");
+      return;
+    }
     clients.unshift(client);
+    restoreQuoteClientLinks();
     persist();
     $("#clientForm").reset();
     $("#clientFormCard").classList.add("hidden");
@@ -653,7 +807,7 @@
   }
 
   function deleteClient(id) {
-    if (!confirm("¿Eliminar este cliente del prototipo?")) return;
+    if (!confirm("¿Eliminar este cliente? Sus presupuestos se conservarán en el historial general.")) return;
     clients = clients.filter(client => client.id !== id);
     persist();
     populateClientSelect();
@@ -672,8 +826,8 @@
         <td>${escapeHtml(countries[client.country] || client.country)}</td>
         <td>${escapeHtml(languageLabels[client.language] || client.language)}</td>
         <td><strong>${escapeHtml(client.phone || client.email || "—")}</strong><small>${escapeHtml(client.email || "")}</small></td>
-        <td>${quoteCount}</td>
-        <td><div class="row-actions"><button class="row-button danger" type="button" data-delete-client="${client.id}">×</button></div></td>
+        <td><button class="row-button client-history-button" type="button" data-client-history="${client.id}" aria-label="Ver ${quoteCount} presupuestos de ${escapeHtml(client.name)}">${quoteCount} · Ver pedidos</button></td>
+        <td><div class="row-actions"><button class="row-button danger" type="button" data-delete-client="${client.id}" aria-label="Eliminar cliente">×</button></div></td>
       </tr>`;
     }).join("");
     $("#clientCount").textContent = `${filtered.length} ${filtered.length === 1 ? "cliente" : "clientes"}`;
@@ -684,13 +838,15 @@
   function renderQuotes() {
     const query = $("#quoteSearch").value.trim().toLowerCase();
     const filter = $("#statusFilter").value;
+    const clientFilter = $("#historyClientFilter").value;
     const filtered = quotes.filter(record => {
       const matchesText = [record.number, record.data.projectTitle, record.data.clientName].join(" ").toLowerCase().includes(query);
-      return matchesText && (filter === "all" || record.status === filter);
+      return matchesText && (filter === "all" || record.status === filter) &&
+        (clientFilter === "all" || record.data.clientId === clientFilter);
     });
     $("#quotesTable").innerHTML = filtered.map(record => `<tr>
       <td><strong>${record.number}</strong></td>
-      <td><strong>${escapeHtml(record.data.projectTitle)}</strong><small>${escapeHtml(record.data.vehicle || record.data.niche)}</small></td>
+      <td><strong>${escapeHtml(record.data.projectTitle)}</strong><small>${escapeHtml(record.data.vehicle || translatedDocumentValue(documentNiches, record.data.niche, "es"))}</small></td>
       <td>${escapeHtml(record.data.clientName)}</td>
       <td><strong>${money(record.data.calculation.finalConverted, record.data.currency)}</strong></td>
       <td><select data-status="${record.id}">${Object.entries(statusLabels).map(([value, label]) => `<option value="${value}" ${record.status === value ? "selected" : ""}>${label}</option>`).join("")}</select></td>
@@ -711,10 +867,11 @@
   }
 
   function deleteQuote(id) {
-    if (!confirm("¿Eliminar este presupuesto del prototipo?")) return;
+    if (!confirm("¿Eliminar este presupuesto?")) return;
     quotes = quotes.filter(record => record.id !== id);
     persist();
     renderQuotes();
+    renderClients();
     renderDashboard();
     toast("Presupuesto eliminado.");
   }
@@ -776,10 +933,18 @@
     $("#country").addEventListener("change", setCountryDefaults);
     $("#currency").addEventListener("change", setCurrencyRate);
     $("#quoteClient").addEventListener("change", selectClient);
+    $("#clientType").addEventListener("change", () => {
+      if ($("#clientType").value === "new" && $("#quoteClient").value) {
+        $("#quoteClient").value = "";
+        selectClient();
+      }
+    });
     $("#printPreview").addEventListener("click", () => openPreview());
     $("#closePreview").addEventListener("click", closePreview);
     $("#previewModal").addEventListener("click", event => { if (event.target === $("#previewModal")) closePreview(); });
-    $("#printQuote").addEventListener("click", () => window.print());
+    $("#printQuote").addEventListener("click", printQuote);
+    window.addEventListener("beforeprint", prepareQuotePrint);
+    window.addEventListener("afterprint", () => $("#quotePrintSheet")?.remove());
     $("#copyWhatsapp").addEventListener("click", copyWhatsapp);
     $("#newClientButton").addEventListener("click", () => $("#clientFormCard").classList.remove("hidden"));
     $("#cancelClient").addEventListener("click", () => $("#clientFormCard").classList.add("hidden"));
@@ -787,6 +952,7 @@
     $("#clientSearch").addEventListener("input", renderClients);
     $("#quoteSearch").addEventListener("input", renderQuotes);
     $("#statusFilter").addEventListener("change", renderQuotes);
+    $("#historyClientFilter").addEventListener("change", renderQuotes);
     $("#settingsForm").addEventListener("submit", saveSettings);
     $("#resetSettings").addEventListener("click", () => {
       if (!confirm("¿Restaurar las tarifas y reglas iniciales?")) return;
@@ -798,9 +964,11 @@
     });
     document.addEventListener("click", event => {
       const deleteClientButton = event.target.closest("[data-delete-client]");
+      const clientHistoryButton = event.target.closest("[data-client-history]");
       const previewQuoteButton = event.target.closest("[data-preview-quote]");
       const deleteQuoteButton = event.target.closest("[data-delete-quote]");
       if (deleteClientButton) deleteClient(deleteClientButton.dataset.deleteClient);
+      if (clientHistoryButton) openClientHistory(clientHistoryButton.dataset.clientHistory);
       if (previewQuoteButton) openPreview(quotes.find(record => record.id === previewQuoteButton.dataset.previewQuote));
       if (deleteQuoteButton) deleteQuote(deleteQuoteButton.dataset.deleteQuote);
     });
