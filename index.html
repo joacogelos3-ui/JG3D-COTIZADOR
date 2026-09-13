@@ -246,8 +246,9 @@
                 <label>Forma de cobro
                   <select id="paymentMethod"><option value="paypal">PayPal</option><option value="other">Transferencia / otro medio</option></select>
                 </label>
-                <label>Tipo de cambio — 1 USD
-                  <div class="input-suffix"><input id="exchangeRate" type="number" min="0.0001" step="0.01" value="1"><span id="currencySuffix">USD</span></div>
+                <label>Tipo de cambio manual — 1 USD
+                  <div class="input-suffix"><input id="exchangeRate" type="number" min="0.0001" step="any" required value="1" aria-describedby="exchangeRateHelp"><span id="currencySuffix">USD</span></div>
+                  <small id="exchangeRateHelp">Se carga desde Configuración. Podés ajustarlo solo para este presupuesto; no se actualiza automáticamente.</small>
                 </label>
                 <label>Validez
                   <div class="input-suffix"><input id="validDays" type="number" min="1" step="1" value="7"><span>días</span></div>
@@ -340,12 +341,12 @@
             </div>
           </article>
           <article class="panel-card form-section span-settings">
-            <h3>Conversiones manuales de respaldo</h3>
-            <p class="section-copy">Cuando conectemos la cotización automática, estos valores seguirán disponibles para corregir el importe.</p>
+            <h3>Tipos de cambio manuales</h3>
+            <p class="section-copy">Estos valores se guardan en tu cuenta y se cargan al elegir la moneda del presupuesto. No se actualizan automáticamente: revisalos antes de cotizar. Los valores iniciales son orientativos, no cotizaciones vigentes.</p>
             <div class="form-grid three">
-              <label>1 USD en USD<input id="settingUsdRate" type="number" min="0.0001" step="0.01"></label>
-              <label>1 USD en BRL<input id="settingBrlRate" type="number" min="0.0001" step="0.01"></label>
-              <label>1 USD en ARS<input id="settingArsRate" type="number" min="0.0001" step="0.01"></label>
+              <label>1 USD en USD<input id="settingUsdRate" type="number" min="0.0001" step="any" required></label>
+              <label>1 USD en BRL<input id="settingBrlRate" type="number" min="0.0001" step="any" required></label>
+              <label>1 USD en ARS<input id="settingArsRate" type="number" min="0.0001" step="any" required></label>
             </div>
           </article>
           <div class="settings-actions span-settings"><button class="secondary-button" id="resetSettings" type="button">Restaurar valores</button><button class="primary-button" type="submit">Guardar configuración</button></div>
