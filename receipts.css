@@ -1,0 +1,48 @@
+#view-receipts [hidden] { display:none !important; }
+.receipt-notice { padding:12px 16px; border-left:3px solid var(--red,#e5232c); background:var(--surface); color:var(--muted); font-size:13px; }
+.receipt-subhead { margin-top:24px; }
+.receipt-filters { margin:24px 0; }
+.receipt-item { border:1px solid var(--line); padding:18px; border-radius:12px; margin:12px 0; background:rgba(255,255,255,.02); }
+.receipt-item .span-two { grid-column:1/-1; }
+.receipt-item .danger { margin-top:12px; }
+.receipt-totals { padding:16px; margin:18px 0; background:#18181d; border-left:4px solid #e5232c; font-size:14px; line-height:1.7; }
+.receipt-confirm { display:flex; align-items:flex-start; gap:10px; margin:18px 0; line-height:1.6; }
+.receipt-confirm input { width:18px; height:18px; flex:0 0 18px; }
+.receipt-error { color:#ff8186; white-space:pre-wrap; }
+#receiptRows .row-actions { flex-wrap:wrap; min-width:165px; }
+#receiptRows small { max-width:230px; overflow-wrap:anywhere; }
+.receipt-doc-table { table-layout:fixed; width:100%; border-collapse:collapse; }
+.receipt-doc-table th { color:#666; background:#f4f4f5; font-size:8px; padding:8px 6px; white-space:normal; }
+.receipt-doc-table th:first-child { width:52%; }
+.receipt-doc-table th:nth-child(2) { width:8%; }
+.receipt-doc-table th:nth-child(3),.receipt-doc-table th:nth-child(4) { width:20%; }
+.receipt-doc-table td { padding:10px 6px; color:#222; font-size:9px; border-bottom:1px solid #ddd; vertical-align:top; overflow-wrap:anywhere; white-space:normal; }
+.receipt-doc-table td strong { color:#222; font-size:10px; }
+.receipt-doc-table td small { display:block; color:#666; font-size:8px; line-height:1.5; margin-top:4px; }
+.receipt-doc-table td a { display:block; color:#b51b24; font-size:8px; margin-top:4px; }
+.receipt-document .doc-field strong { overflow-wrap:anywhere; }
+.receipt-document .doc-kicker { margin-top:18px; }
+.receipt-document .doc-grid { gap:12px 24px; margin:18px 0; padding:16px; }
+.receipt-document .doc-section { margin-top:16px; }
+.receipt-document .doc-links { display:block; text-align:right; }
+.receipt-document .doc-links a { display:inline-block; margin-left:10px; font-size:8px; }
+.receipt-document .doc-links svg { vertical-align:middle; margin-right:4px; }
+.receipt-legal { color:#777; font-size:9px; margin:12px 0; }
+.receipt-print-root { position:fixed; top:0; left:-10000px; width:210mm; color-scheme:light; background:white; }
+.receipt-print-page { position:relative; width:210mm; height:296.8mm; padding:12mm; overflow:hidden; color:#151518; background:white; break-after:page; }
+.receipt-print-page:last-child { break-after:auto; }
+.receipt-print-page .quote-document { width:186mm; min-height:0; padding:0; margin:0; box-shadow:none; }
+.receipt-print-page .doc-logo { width:154px; height:82px; }
+.receipt-print-page .doc-grid { grid-template-columns:repeat(2,minmax(0,1fr)); }
+.receipt-print-page .doc-footer-top { flex-direction:row; align-items:center; }
+.receipt-print-page .doc-links { flex-wrap:nowrap; flex-shrink:0; }
+@media(max-width:700px) {
+  #view-receipts .split-heading { flex-wrap:wrap; gap:12px; }
+  #view-receipts .metrics-grid { grid-template-columns:repeat(2,minmax(0,1fr)); }
+  #view-receipts .metric-card strong { font-size:20px; overflow-wrap:anywhere; }
+  #view-receipts .row-actions { flex-wrap:wrap; }
+}
+@media print {
+  #quotePrintSheet.receipt-print-root { position:relative; left:auto; top:auto; display:block !important; height:auto; overflow:visible; break-inside:auto; }
+  .receipt-print-page { break-inside:avoid; -webkit-print-color-adjust:exact; print-color-adjust:exact; }
+}

@@ -66,6 +66,7 @@
   let clients = load(STORAGE.clients, []);
   let quotes = load(STORAGE.quotes, []);
   let currentPreview = null;
+  let receiptsApp = null;
   let currentUser = null;
   let cloudSyncTimer = null;
   let suppressCloudSync = false;
@@ -255,6 +256,30 @@
 
     try {
       const result = await loadCloudWorkspace();
+      if (!receiptsApp) receiptsApp = window.JG3DReceipts.create({
+        cloud: cloudClient, clients: () => clients, quotes: () => quotes,
+        navigate, toast, footer: documentFooter, rate: fetchCurrencyRate, closePreview,
+        preview: receipt => openPreview({ kind: 'receipt', receipt }),
+        async ensureClient(receipt) {
+          const selected = clients.find(c => c.id === receipt.client_id);
+          if (selected) return selected.id;
+          const matches = matchingClients(receipt.client.name, receipt.client.country);
+          if (matches.length > 1) throw Error('Hay varios clientes con ese nombre. Seleccioná la ficha correcta.');
+          if (matches.length === 1) return matches[0].id;
+          const client = createClientFromQuote({clientName:receipt.client.name, clientEmail:receipt.client.email, clientPhone:receipt.client.phone, country:receipt.client.country, language:receipt.language, currency:receipt.currency});
+          try {
+            clearTimeout(cloudSyncTimer);
+            await saveWorkspaceNow();
+            suppressCloudSync = true; persist(); suppressCloudSync = false;
+            populateClientSelect(); renderClients(); renderDashboard();
+            return client.id;
+          } catch (error) {
+            clients = clients.filter(c => c.id !== client.id);
+            suppressCloudSync = false;
+            throw error;
+          }
+        }
+      });
       if (!appStarted) {
         bindEvents();
         appStarted = true;
@@ -269,6 +294,7 @@
       $("#authGate").hidden = true;
       $("#appShell").hidden = false;
       setCloudStatus("Nube segura activa", "online");
+      await receiptsApp.start(currentUser);
       if (result === "migrated") toast("Datos locales sincronizados con Supabase.");
     } catch (error) {
       console.error("Supabase workspace load failed", error);
@@ -316,6 +342,10 @@
     }
     await cloudClient.auth.signOut();
     currentUser = null;
+    receiptsApp?.stop();
+    closePreview();
+    currentPreview = null;
+    $("#quoteDocument").replaceChildren();
     clients = [];
     quotes = [];
     settings = structuredClone(defaults);
@@ -332,6 +362,7 @@
       quote: ["COTIZACIÓN", "Nuevo presupuesto"],
       clients: ["RELACIONES", "Clientes"],
       history: ["SEGUIMIENTO", "Presupuestos"],
+      receipts: ["VENTAS DIRECTAS", "Recibos e ingresos"],
       settings: ["SISTEMA", "Configuración"]
     };
     $$(".view").forEach(view => view.classList.toggle("active", view.id === `view-${viewName}`));
@@ -342,6 +373,7 @@
     if (viewName === "dashboard") renderDashboard();
     if (viewName === "clients") renderClients();
     if (viewName === "history") renderQuotes();
+    if (viewName === "receipts") receiptsApp?.render();
     if (viewName === "settings") populateSettings();
     if (viewName === "quote") refreshRateIfNeeded();
     window.scrollTo({ top: 0, behavior: "smooth" });
@@ -461,7 +493,39 @@
     return `JG3D-${new Date().getFullYear()}-${String(number).padStart(3, "0")}`;
   }
 
+  function documentFooter(labels) {
+    return `      <footer class="doc-footer">
+        <div class="doc-footer-top">
+          <div class="doc-origin">
+            <svg class="doc-flag" viewBox="0 0 30 20" role="img" aria-label="Argentina">
+              <rect width="30" height="6.67" fill="#74acdf"></rect>
+              <rect y="6.67" width="30" height="6.66" fill="#ffffff"></rect>
+              <rect y="13.33" width="30" height="6.67" fill="#74acdf"></rect>
+              <circle cx="15" cy="10" r="2.1" fill="#f6b40e"></circle>
+            </svg>
+            <div><span>JG3D WORKS</span><strong>${labels.origin}</strong></div>
+          </div>
+          <div class="doc-links" aria-label="${labels.contact}">
+            <a href="https://www.instagram.com/jg3d.works/" target="_blank" rel="noopener noreferrer">
+              <svg class="doc-contact-icon doc-instagram" viewBox="0 0 24 24" fill="none" stroke="#e5232c" stroke-width="1.8" aria-hidden="true"><rect x="3" y="3" width="18" height="18" rx="5"></rect><circle cx="12" cy="12" r="4.2"></circle><circle class="doc-instagram-dot" cx="17.4" cy="6.7" r="1" fill="#e5232c" stroke="none"></circle></svg>
+              <span>@jg3d.works</span>
+            </a>
+            <a href="https://jg3dworks.com/whatsapp/" target="_blank" rel="noopener noreferrer">
+              <svg class="doc-contact-icon doc-whatsapp" viewBox="0 0 24 24" fill="none" stroke="#e5232c" stroke-width="1.8" aria-hidden="true"><path stroke-linecap="round" stroke-linejoin="round" d="M20.5 11.6a8.5 8.5 0 0 1-12.6 7.5L3 20.5l1.4-4.8a8.5 8.5 0 1 1 16.1-4.1Z"></path><path class="doc-whatsapp-phone" fill="#e5232c" stroke="none" d="M8.3 7.3c-.3 0-.6.1-.8.4-.4.4-.7 1-.7 1.6 0 1.5 1.3 3.4 2.9 4.9 1.5 1.4 3.6 2.4 4.9 2.4.6 0 1.3-.4 1.6-.9.2-.4.3-.9.2-1.1l-2.2-1.1c-.2-.1-.4-.1-.5.1l-.8 1c-.2.2-.4.2-.6.1-1.5-.6-2.7-1.7-3.3-3-.1-.2-.1-.4.1-.6l.6-.8c.2-.2.2-.4.1-.6l-.9-2.1c-.1-.2-.3-.3-.6-.3Z"></path></svg>
+              <span>WhatsApp ↗</span>
+            </a>
+            <a href="https://jg3dworks.com/" target="_blank" rel="noopener noreferrer">
+              <svg class="doc-contact-icon doc-website" viewBox="0 0 24 24" fill="none" stroke="#e5232c" stroke-width="1.8" aria-hidden="true"><circle cx="12" cy="12" r="9"></circle><ellipse cx="12" cy="12" rx="4" ry="9"></ellipse><path d="M3 12h18M5 6.5h14M5 17.5h14" stroke-linecap="round"></path></svg>
+              <span>jg3dworks.com ↗</span>
+            </a>
+          </div>
+        </div>
+        <p>${labels.footer}</p>
+      </footer>`;
+  }
+
   function buildDocument(record) {
+    if (record.kind === 'receipt') return receiptsApp.document(record.receipt);
     const data = record.data || record;
     const number = record.number || quoteNumber();
     const createdAt = record.createdAt || new Date().toISOString();
@@ -516,34 +580,7 @@
       <section class="doc-section"><h3>${labels.deliverables}</h3><ul>${deliverables.map(item => `<li>${escapeHtml(item)}</li>`).join("")}</ul></section>
       <section class="doc-section"><h3>${labels.conditions}</h3><ul><li>${data.revisions} ${labels.revisions}.</li><li>${escapeHtml(data.notes || defaultCondition)}</li><li>${documentLanguage === "pt" ? "A entrega dos arquivos finais é realizada após a confirmação do pagamento." : documentLanguage === "en" ? "Final files are delivered after payment confirmation." : "Los archivos finales se entregan después de confirmar el pago."}</li></ul></section>
       <div class="doc-total"><div><span>${brazilPaypal ? labels.paypalTotal : labels.total}</span><strong>${payableText}</strong>${brazilPaypal ? `<small class="doc-price-reference">${labels.reference}: ${brlReference}</small>` : ""}</div><div class="doc-payment"><span>${labels.payment}</span><p>${paymentText}<br>${escapeHtml(paymentMethodText)}</p></div></div>
-      <footer class="doc-footer">
-        <div class="doc-footer-top">
-          <div class="doc-origin">
-            <svg class="doc-flag" viewBox="0 0 30 20" role="img" aria-label="Argentina">
-              <rect width="30" height="6.67" fill="#74acdf"></rect>
-              <rect y="6.67" width="30" height="6.66" fill="#ffffff"></rect>
-              <rect y="13.33" width="30" height="6.67" fill="#74acdf"></rect>
-              <circle cx="15" cy="10" r="2.1" fill="#f6b40e"></circle>
-            </svg>
-            <div><span>JG3D WORKS</span><strong>${labels.origin}</strong></div>
-          </div>
-          <div class="doc-links" aria-label="${labels.contact}">
-            <a href="https://www.instagram.com/jg3d.works/" target="_blank" rel="noopener noreferrer">
-              <svg class="doc-contact-icon doc-instagram" viewBox="0 0 24 24" fill="none" stroke="#e5232c" stroke-width="1.8" aria-hidden="true"><rect x="3" y="3" width="18" height="18" rx="5"></rect><circle cx="12" cy="12" r="4.2"></circle><circle class="doc-instagram-dot" cx="17.4" cy="6.7" r="1" fill="#e5232c" stroke="none"></circle></svg>
-              <span>@jg3d.works</span>
-            </a>
-            <a href="https://jg3dworks.com/whatsapp/" target="_blank" rel="noopener noreferrer">
-              <svg class="doc-contact-icon doc-whatsapp" viewBox="0 0 24 24" fill="none" stroke="#e5232c" stroke-width="1.8" aria-hidden="true"><path stroke-linecap="round" stroke-linejoin="round" d="M20.5 11.6a8.5 8.5 0 0 1-12.6 7.5L3 20.5l1.4-4.8a8.5 8.5 0 1 1 16.1-4.1Z"></path><path class="doc-whatsapp-phone" fill="#e5232c" stroke="none" d="M8.3 7.3c-.3 0-.6.1-.8.4-.4.4-.7 1-.7 1.6 0 1.5 1.3 3.4 2.9 4.9 1.5 1.4 3.6 2.4 4.9 2.4.6 0 1.3-.4 1.6-.9.2-.4.3-.9.2-1.1l-2.2-1.1c-.2-.1-.4-.1-.5.1l-.8 1c-.2.2-.4.2-.6.1-1.5-.6-2.7-1.7-3.3-3-.1-.2-.1-.4.1-.6l.6-.8c.2-.2.2-.4.1-.6l-.9-2.1c-.1-.2-.3-.3-.6-.3Z"></path></svg>
-              <span>WhatsApp ↗</span>
-            </a>
-            <a href="https://jg3dworks.com/" target="_blank" rel="noopener noreferrer">
-              <svg class="doc-contact-icon doc-website" viewBox="0 0 24 24" fill="none" stroke="#e5232c" stroke-width="1.8" aria-hidden="true"><circle cx="12" cy="12" r="9"></circle><ellipse cx="12" cy="12" rx="4" ry="9"></ellipse><path d="M3 12h18M5 6.5h14M5 17.5h14" stroke-linecap="round"></path></svg>
-              <span>jg3dworks.com ↗</span>
-            </a>
-          </div>
-        </div>
-        <p>${labels.footer}</p>
-      </footer>`;
+      ${documentFooter(labels)}`;
   }
 
   function openPreview(record = null) {
@@ -551,6 +588,9 @@
     $("#quotePrintSheet")?.remove();
     currentPreview = record || { number: quoteNumber(), createdAt: new Date().toISOString(), data: getQuoteData() };
     $("#quoteDocument").innerHTML = buildDocument(currentPreview);
+    $("#quoteDocument").classList.toggle('receipt-document', currentPreview.kind === 'receipt');
+    $("#previewTitle").textContent = currentPreview.kind === 'receipt' ? 'Vista previa del recibo' : 'Vista previa del presupuesto';
+    $("#copyWhatsapp").disabled = currentPreview.kind === 'receipt' && currentPreview.receipt.status === 'void';
     $("#previewModal").classList.add("open");
     $("#previewModal").setAttribute("aria-hidden", "false");
   }
@@ -563,6 +603,7 @@
 
   function prepareQuotePrint() {
     if (!currentPreview) return null;
+    if (currentPreview.kind === 'receipt') return receiptsApp.preparePrint(currentPreview.receipt);
     let sheet = $("#quotePrintSheet");
     if (!sheet) {
       sheet = document.createElement("div");
@@ -581,6 +622,7 @@
   }
 
   function fitQuotePrint(sheet) {
+    if (sheet.classList.contains('receipt-print-root')) return;
     const content = $(".quote-document", sheet);
     content.style.transform = "none";
     const sheetStyle = getComputedStyle(sheet);
@@ -618,6 +660,7 @@
   }
 
   function whatsappMessage(record) {
+    if (record.kind === 'receipt') return receiptsApp.message(record.receipt);
     const data = record.data || record;
     const number = record.number || quoteNumber();
     const brazilPaypal = data.country === "BR" && data.paymentMethod === "paypal";
@@ -962,7 +1005,7 @@
         <td>${escapeHtml(languageLabels[client.language] || client.language)}</td>
         <td><strong>${escapeHtml(client.phone || client.email || "—")}</strong><small>${escapeHtml(client.email || "")}</small></td>
         <td><button class="row-button client-history-button" type="button" data-client-history="${client.id}" aria-label="Ver ${quoteCount} presupuestos de ${escapeHtml(client.name)}">${quoteCount} · Ver pedidos</button></td>
-        <td><div class="row-actions"><button class="row-button danger" type="button" data-delete-client="${client.id}" aria-label="Eliminar cliente">×</button></div></td>
+        <td><div class="row-actions"><button class="row-button" type="button" data-new-receipt-client="${escapeHtml(client.id)}">Crear recibo</button><button class="row-button" type="button" data-client-receipts="${escapeHtml(client.id)}">Ver pagos</button><button class="row-button danger" type="button" data-delete-client="${client.id}" aria-label="Eliminar cliente">×</button></div></td>
       </tr>`;
     }).join("");
     $("#clientCount").textContent = `${filtered.length} ${filtered.length === 1 ? "cliente" : "clientes"}`;
@@ -986,7 +1029,7 @@
       <td><strong>${money(record.data.calculation.finalConverted, record.data.currency)}</strong></td>
       <td><select data-status="${record.id}">${Object.entries(statusLabels).map(([value, label]) => `<option value="${value}" ${record.status === value ? "selected" : ""}>${label}</option>`).join("")}</select></td>
       <td>${dateLabel(record.createdAt)}</td>
-      <td><div class="row-actions"><button class="row-button" type="button" data-preview-quote="${record.id}" title="Vista previa">PDF</button><button class="row-button danger" type="button" data-delete-quote="${record.id}" title="Eliminar">×</button></div></td>
+      <td><div class="row-actions"><button class="row-button" type="button" data-preview-quote="${record.id}" title="Vista previa">PDF</button><button class="row-button" type="button" data-receipt-quote="${escapeHtml(record.id)}">Crear recibo</button><button class="row-button danger" type="button" data-delete-quote="${record.id}" title="Eliminar">×</button></div></td>
     </tr>`).join("");
     $("#quotesEmpty").classList.toggle("hidden", filtered.length > 0);
     $(".responsive-table", $("#view-history")).classList.toggle("hidden", filtered.length === 0);
@@ -1108,6 +1151,12 @@
       toast("Valores iniciales restaurados.");
     });
     document.addEventListener("click", event => {
+      const newReceiptClient = event.target.closest('[data-new-receipt-client]');
+      const clientReceipts = event.target.closest('[data-client-receipts]');
+      const quoteReceipt = event.target.closest('[data-receipt-quote]');
+      if (newReceiptClient) receiptsApp?.openNew(newReceiptClient.dataset.newReceiptClient);
+      if (clientReceipts) receiptsApp?.history(clientReceipts.dataset.clientReceipts);
+      if (quoteReceipt) receiptsApp?.openNew('', quoteReceipt.dataset.receiptQuote);
       const deleteClientButton = event.target.closest("[data-delete-client]");
       const clientHistoryButton = event.target.closest("[data-client-history]");
       const previewQuoteButton = event.target.closest("[data-preview-quote]");
