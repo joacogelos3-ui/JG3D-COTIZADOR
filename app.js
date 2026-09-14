@@ -261,7 +261,7 @@
     try {
       const result = await loadCloudWorkspace();
       if (!receiptsApp) receiptsApp = window.JG3DReceipts.create({
-        cloud: cloudClient, clients: () => clients, quotes: () => quotes,
+        cloud: cloudClient, clients: () => clients, quotes: () => quotes, settings: () => settings,
         navigate, toast, footer: documentFooter, rate: fetchCurrencyRate, closePreview,
         preview: receipt => openPreview({ kind: 'receipt', receipt }),
         async ensureClient(receipt) {

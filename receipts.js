@@ -29,7 +29,7 @@ window.JG3DReceipts = { create(host) {
         <label>Moneda en que recibiste el pago<select id="rCurrency">${options({USD:'USD · Dólar',BRL:'BRL · Real',ARS:'ARS · Peso argentino'})}</select></label>
         <label>Tipo de cambio de este pago · 1 USD<input id="rRate" type="number" min="0.0000000001" step="any" required value="1"><button type="button" class="row-button" id="rFetchRate">Consultar cambio actual</button></label>
         <label>Importe bruto pagado por el cliente<input id="rPaid" type="number" min="0.01" step="0.01" required></label>
-        <label>Comisión real descontada · moneda del pago<input id="rFee" type="number" min="0" step="0.01" required value="0"></label>
+        <label>Comisión descontada · moneda del pago<input id="rFee" type="number" min="0" step="0.01" required value="0"><small id="rFeeHelp">Para transferencias y otros medios podés ingresar la comisión real.</small></label>
         <label>ID / referencia de la operación (opcional)<input id="rRef" maxlength="140"></label>
       </div>
       <p class="section-copy" id="rFxNote">En USD el tipo de cambio es 1. Para pagos anteriores, ingresá el cambio utilizado en esa operación.</p>
@@ -76,9 +76,19 @@ window.JG3DReceipts = { create(host) {
   }
   function items() { return [...$('#rItems').children].map(row=>Object.fromEntries([...row.querySelectorAll('[data-item]')].map(n=>[n.dataset.item,['quantity','unitUsd'].includes(n.dataset.item)?Number(n.value):n.value.trim()]))); }
   function calculation(recalcPaid=false) {
-    const gross=C.amounts(items(),0,0,1).grossUsd, rate=Number($('#rRate').value), code=$('#rCurrency').value;
-    if(code==='USD') {$('#rRate').value='1'; $('#rRate').readOnly=true; $('#rPaid').readOnly=true;} else {$('#rRate').readOnly=false;$('#rPaid').readOnly=false;}
-    if(recalcPaid || code==='USD') $('#rPaid').value=rate>0?C.round(gross*Number($('#rRate').value)):'';
+    const gross=C.amounts(items(),0,0,1).grossUsd, paypal=$('#rMethod').value==='paypal';
+    let code=$('#rCurrency').value;
+    if(paypal) { $('#rCurrency').value='USD'; $('#rRate').value='1'; $('#rCurrency').disabled=true; $('#rRate').readOnly=true; $('#rPaid').readOnly=false; $('#rFetchRate').disabled=true; $('#rFee').readOnly=true; }
+    else if(code==='USD') {$('#rCurrency').disabled=false;$('#rRate').value='1'; $('#rRate').readOnly=true; $('#rPaid').readOnly=true; $('#rFetchRate').disabled=true; $('#rFee').readOnly=false;}
+    else {$('#rCurrency').disabled=false;$('#rRate').readOnly=false;$('#rPaid').readOnly=false;$('#rFetchRate').disabled=false;$('#rFee').readOnly=false;}
+    code=$('#rCurrency').value;
+    if(recalcPaid || (!paypal && code==='USD')) $('#rPaid').value=Number($('#rRate').value)>0?C.round(gross*Number($('#rRate').value)):'';
+    if(paypal) {
+      const grossPaid=Number($('#rPaid').value)||0,cfg=host.settings?.()||{},percent=Math.min(99,Math.max(0,Number(cfg.paypalPercent??6))),fixed=Math.max(0,Number(cfg.paypalFixed??.30));
+      $('#rFee').value=grossPaid>0?C.round(Math.min(grossPaid,grossPaid*percent/100+fixed)):0;
+      $('#rFeeHelp').textContent=`Calculada automáticamente: ${percent}% + USD ${fixed.toFixed(2)}. El pago PayPal se registra en USD.`;
+    } else $('#rFeeHelp').textContent='Para transferencias y otros medios podés ingresar la comisión real.';
+    const rate=Number($('#rRate').value);
     if (!(rate>0)) { $('#rTotals').textContent=`Venta: ${C.currency(gross)} · Ingresá el tipo de cambio real del pago para calcular el importe y el neto.`;return; }
     const a=C.amounts(items(),Number($('#rPaid').value),Number($('#rFee').value),rate);
     $('#rTotals').textContent=`Venta: ${C.currency(gross)} · Comisión: ${C.currency(a.fee,code)} · Neto: ${C.currency(a.net,code)} (≈ ${C.currency(a.netUsd)})`;
@@ -217,6 +227,7 @@ window.JG3DReceipts = { create(host) {
   $('#rClient').onchange=()=>{const id=$('#rClient').value;if(id)useClient(id);else{$('#rName').value='';$('#rEmail').value='';$('#rPhone').value='';}};
   $('#rCountry').onchange=()=>{$('#rLanguage').value=({BR:'pt',AR:'es'})[$('#rCountry').value] || 'en';};
   $('#rQuote').onchange=()=>{copyQuote($('#rQuote').value);};
+  $('#rMethod').onchange=()=>{fxInfo={mode:'manual'};$('#rConfirmed').checked=false;calculation(false);};
   $('#rCurrency').onchange=()=>{$('#rRate').value=$('#rCurrency').value==='USD'?1:'';$('#rPaid').value='';fxInfo={mode:'manual'};$('#rFee').value=0;$('#rConfirmed').checked=false;calculation(true);};
   $('#rRate').oninput=()=>{fxInfo={mode:'manual'};calculation(true);$('#rConfirmed').checked=false;};
   $('#rPaid').oninput=()=>{const gross=C.amounts(items(),0,0,1).grossUsd;if(gross>0 && $('#rCurrency').value!=='USD')$('#rRate').value=(Number($('#rPaid').value)/gross).toFixed(10);fxInfo={mode:'actual_payment'};calculation();$('#rConfirmed').checked=false;};
