@@ -370,9 +370,10 @@ td select { min-width: 116px; height: 32px; margin: 0; font-size: 9px; }
 .doc-origin strong { color: #6c6c72; font-size: 7px; font-weight: 600; }
 .doc-flag { width: 30px; height: 20px; flex: 0 0 auto; border: 1px solid #d5d5d8; border-radius: 2px; box-shadow: 0 2px 5px rgba(0,0,0,.08); }
 .doc-links { display: flex; flex-wrap: wrap; justify-content: flex-end; gap: 7px 13px; }
-.doc-links a { display: inline-flex; gap: 5px; align-items: center; color: #2f2f34; font-size: 8px; font-weight: 700; text-decoration: none; }
+.doc-links a { display: inline-flex; gap: 5px; align-items: center; color: #2f2f34; font-size: 8px; font-weight: 700; text-decoration: none; white-space: nowrap; }
 .doc-links a:hover { color: #e5232c; }
-.doc-instagram { width: 13px; height: 13px; overflow: visible; fill: none; stroke: #e5232c; stroke-width: 1.8; }
+.doc-contact-icon { width: 13px; height: 13px; flex: 0 0 13px; overflow: visible; fill: none; stroke: #e5232c; stroke-width: 1.8; }
+.doc-whatsapp-phone { fill: #e5232c; stroke: none; }
 .doc-instagram-dot { fill: #e5232c; stroke: none; }
 .doc-footer > p { margin: 12px 0 0; color: #99999e; font-size: 7px; text-align: center; text-transform: uppercase; letter-spacing: .09em; }
 
@@ -450,7 +451,7 @@ td select { min-width: 116px; height: 32px; margin: 0; font-size: 9px; }
 .quote-print-sheet .doc-meta { min-width: 180px; padding: 13px 16px; }
 .quote-print-sheet .doc-grid { grid-template-columns: repeat(2, minmax(0,1fr)); }
 .quote-print-sheet .doc-footer-top { flex-direction: row; align-items: center; }
-.quote-print-sheet .doc-links { justify-content: flex-end; }
+.quote-print-sheet .doc-links { justify-content: flex-end; flex-shrink: 0; flex-wrap: nowrap; }
 .quote-print-sheet .doc-title,
 .quote-print-sheet .doc-field strong,
 .quote-print-sheet .doc-section p,
@@ -467,6 +468,7 @@ td select { min-width: 116px; height: 32px; margin: 0; font-size: 9px; }
   body::before, body::after { display: none !important; }
   #quotePrintSheet {
     display: block !important; position: relative; top: auto; left: auto;
+    pointer-events: auto;
     width: 210mm; height: 296.8mm; margin: 0; border: 0;
     break-inside: avoid; break-after: auto;
   }

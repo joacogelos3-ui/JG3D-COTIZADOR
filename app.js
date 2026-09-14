@@ -529,11 +529,17 @@
           </div>
           <div class="doc-links" aria-label="${labels.contact}">
             <a href="https://www.instagram.com/jg3d.works/" target="_blank" rel="noopener noreferrer">
-              <svg class="doc-instagram" viewBox="0 0 24 24" aria-hidden="true"><rect x="3" y="3" width="18" height="18" rx="5"></rect><circle cx="12" cy="12" r="4.2"></circle><circle class="doc-instagram-dot" cx="17.4" cy="6.7" r="1"></circle></svg>
+              <svg class="doc-contact-icon doc-instagram" viewBox="0 0 24 24" fill="none" stroke="#e5232c" stroke-width="1.8" aria-hidden="true"><rect x="3" y="3" width="18" height="18" rx="5"></rect><circle cx="12" cy="12" r="4.2"></circle><circle class="doc-instagram-dot" cx="17.4" cy="6.7" r="1" fill="#e5232c" stroke="none"></circle></svg>
               <span>@jg3d.works</span>
             </a>
-            <a href="https://jg3dworks.com/whatsapp/" target="_blank" rel="noopener noreferrer">WhatsApp ↗</a>
-            <a href="https://jg3dworks.com/" target="_blank" rel="noopener noreferrer">jg3dworks.com ↗</a>
+            <a href="https://jg3dworks.com/whatsapp/" target="_blank" rel="noopener noreferrer">
+              <svg class="doc-contact-icon doc-whatsapp" viewBox="0 0 24 24" fill="none" stroke="#e5232c" stroke-width="1.8" aria-hidden="true"><path stroke-linecap="round" stroke-linejoin="round" d="M20.5 11.6a8.5 8.5 0 0 1-12.6 7.5L3 20.5l1.4-4.8a8.5 8.5 0 1 1 16.1-4.1Z"></path><path class="doc-whatsapp-phone" fill="#e5232c" stroke="none" d="M8.3 7.3c-.3 0-.6.1-.8.4-.4.4-.7 1-.7 1.6 0 1.5 1.3 3.4 2.9 4.9 1.5 1.4 3.6 2.4 4.9 2.4.6 0 1.3-.4 1.6-.9.2-.4.3-.9.2-1.1l-2.2-1.1c-.2-.1-.4-.1-.5.1l-.8 1c-.2.2-.4.2-.6.1-1.5-.6-2.7-1.7-3.3-3-.1-.2-.1-.4.1-.6l.6-.8c.2-.2.2-.4.1-.6l-.9-2.1c-.1-.2-.3-.3-.6-.3Z"></path></svg>
+              <span>WhatsApp ↗</span>
+            </a>
+            <a href="https://jg3dworks.com/" target="_blank" rel="noopener noreferrer">
+              <svg class="doc-contact-icon doc-website" viewBox="0 0 24 24" fill="none" stroke="#e5232c" stroke-width="1.8" aria-hidden="true"><circle cx="12" cy="12" r="9"></circle><ellipse cx="12" cy="12" rx="4" ry="9"></ellipse><path d="M3 12h18M5 6.5h14M5 17.5h14" stroke-linecap="round"></path></svg>
+              <span>jg3dworks.com ↗</span>
+            </a>
           </div>
         </div>
         <p>${labels.footer}</p>
