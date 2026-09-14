@@ -47,7 +47,8 @@ El módulo **Recibos e ingresos** registra pagos externos a Cults. Permite crear
 - El cambio y su origen se conservan con la venta. Para pagos antiguos se ingresa el cambio real; la consulta actual usa las mismas fuentes del cotizador (dólar blue venta y USD/BRL de referencia).
 - PDF y mensaje ES/EN/PT según el cliente, con posibilidad de elegir idioma al emitir. El PDF incluye identidad JG3D, bandera argentina y enlaces. Los documentos extensos se distribuyen en hojas A4 legibles.
 - Estados pagado, enviado y anulado. Enviado es una marca manual, no un envío automático. La anulación exige un motivo y excluye el recibo de los ingresos.
-- Filtros por período, cliente, estado, medio, moneda y origen; agrupaciones por mes, país, cliente, medio o moneda. No suma presupuestos como pagos.
+- Filtro interactivo por año, cliente, estado, medio, moneda y origen; agrupaciones por año, mes, país, cliente, medio o moneda. La fecha completa se conserva en cada recibo.
+- Al cambiar un presupuesto a **Entregado**, se crea automáticamente un recibo/ingreso vinculado al cliente y al presupuesto. Usa el total cobrado guardado en el presupuesto y una referencia idempotente para no duplicarlo si el estado se vuelve a cambiar.
 
 ### Base de datos
 

@@ -40,14 +40,14 @@ window.JG3DReceipts = { create(host) {
       <p id="rError" class="receipt-error" role="alert"></p><button class="primary-button" type="submit" id="rSave">Guardar pago y crear recibo</button>
     </form></div>
     <div class="panel-card receipt-filters"><div class="form-grid three">
-      <label>Desde<input type="date" id="rfFrom"></label><label>Hasta<input type="date" id="rfTo"></label>
+      <label>Año del pago<select id="rfYear"><option value="">Todos los años</option></select></label>
       <label>Buscar<input type="search" id="rfSearch" placeholder="Recibo, cliente o archivo"></label>
       <label>Cliente<select id="rfClient"><option value="">Todos</option></select></label>
       <label>Medio de pago<select id="rfMethod"><option value="">Todos</option>${options(methods)}</select></label>
       <label>Moneda cobrada<select id="rfCurrency"><option value="">Todas</option>${options({USD:'USD',BRL:'BRL',ARS:'ARS'})}</select></label>
       <label>Estado<select id="rfState">${options({'':'Todos',paid:'Pagado',sent:'Enviado',void:'Anulado'})}</select></label>
       <label>Origen<select id="rfOrigin">${options({'':'Todos',direct:'Archivos existentes',quote:'Desde presupuesto'})}</select></label>
-      <label>Agrupar resumen<select id="rfGroup">${options({month:'Mes del pago',country:'País',client:'Cliente',method:'Medio de pago',currency:'Moneda'})}</select></label>
+      <label>Agrupar resumen<select id="rfGroup">${options({year:'Año del pago',month:'Mes del pago',country:'País',client:'Cliente',method:'Medio de pago',currency:'Moneda'},'year')}</select></label>
     </div><button type="button" id="rfClear" class="row-button">Limpiar filtros</button></div>
     <div class="metrics-grid" id="receiptMetrics"></div>
     <p class="section-copy">Totales en USD usando el cambio guardado en cada pago. Los anulados no suman; enviar un recibo no vuelve a contabilizarlo.</p>
@@ -61,6 +61,10 @@ window.JG3DReceipts = { create(host) {
     $('#rClient').value=prev;
     const all=new Map(host.clients().map(c=>[c.id,c.name])); records.forEach(r=>{if(!all.has(r.client_id))all.set(r.client_id,r.client.name);});
     $('#rfClient').innerHTML='<option value="">Todos</option>'+[...all].map(([id,name])=>`<option value="${e(id)}">${e(name)}</option>`).join(''); $('#rfClient').value=filter;
+    const selectedYear=$('#rfYear')?.value || '';
+    const years=new Set([String(new Date().getFullYear()),...records.map(r=>String(r.paid_date||'').slice(0,4)).filter(Boolean)]);
+    if($('#rfYear')) $('#rfYear').innerHTML='<option value="">Todos los años</option>'+[...years].sort((a,b)=>b.localeCompare(a)).map(y=>`<option value="${e(y)}">${e(y)}</option>`).join('');
+    if($('#rfYear') && years.has(selectedYear)) $('#rfYear').value=selectedYear;
     $('#rQuote').innerHTML='<option value="">Venta directa</option>'+host.quotes().map(q=>`<option value="${e(q.id)}">${e(q.number)} · ${e(q.data.clientName)}</option>`).join('');
     $('#rQuote').value=sourceQuote?.id || '';
   }
@@ -104,6 +108,48 @@ window.JG3DReceipts = { create(host) {
     const prior=records.filter(r=>r.source_quote_id===id && r.status!=='void');if(prior.length)$('#receiptSource').textContent+=` Ya hay ${prior.length} recibo(s) de este presupuesto. Evitá registrar el mismo pago dos veces.`;
     calculation(true);
   }
+  async function createFromQuote(q) {
+    if(!user || !ready) throw Error('El módulo de recibos todavía no terminó de cargar.');
+    if(!q || !q.id || !q.data) throw Error('El presupuesto no tiene datos suficientes para crear el ingreso.');
+    const d=q.data, transactionRef=`quote:${q.id}:delivered`;
+    const localExisting=records.find(r=>r.transaction_ref===transactionRef && r.status!=='void');
+    if(localExisting) return {record:localExisting,created:false};
+    const existing=await host.cloud.from('receipts').select('*').eq('user_id',user.id).eq('source_quote_id',q.id).order('issued_at',{ascending:false});
+    if(existing.error) throw existing.error;
+    const quoteReceipts=existing.data || [];
+    const existingAuto=quoteReceipts.find(r=>r.transaction_ref===transactionRef && r.status!=='void');
+    if(existingAuto) { records=[existingAuto,...records.filter(r=>r.id!==existingAuto.id)]; render(); return {record:existingAuto,created:false}; }
+    const grossUsd=C.round(Number(d.calculation?.grossUsd || 0));
+    if(!(grossUsd>0)) throw Error('El presupuesto no tiene un total positivo.');
+    const previousUsd=C.round(quoteReceipts.filter(r=>r.status!=='void').reduce((sum,r)=>sum+Number(r.gross_usd || 0),0));
+    const outstandingUsd=C.round(Math.max(0,grossUsd-previousUsd));
+    if(outstandingUsd<=0.01) {
+      const latest=quoteReceipts.find(r=>r.status!=='void') || quoteReceipts[0] || null;
+      if(latest) { records=[latest,...records.filter(r=>r.id!==latest.id)]; render(); return {record:latest,created:false}; }
+      throw Error('El presupuesto ya está completamente registrado en recibos.');
+    }
+    const currency=d.paymentMethod==='paypal'?'USD':(d.currency || 'USD');
+    const rate=currency==='USD'?1:Number(d.exchangeRate || 1);
+    if(!(rate>0)) throw Error('El presupuesto no tiene un tipo de cambio válido.');
+    const feeUsd=d.paymentMethod==='paypal'?C.round(Number(d.calculation?.paymentFee || 0) * outstandingUsd / grossUsd):0;
+    const r={id:crypto.randomUUID(),paid_date:today(),client_id:d.clientId || '',source_quote_id:q.id,
+      client:{name:d.clientName || 'Cliente',email:d.clientEmail || '',phone:d.clientPhone || '',country:d.country || 'OTHER'},
+      language:d.language || 'en',items:[{name:`${d.projectTitle || 'Trabajo de modelado 3D'}${previousUsd>0?' · Saldo final':''}`,description:(d.scope || '').slice(0,240),format:(d.deliverables || []).join(' / ').toUpperCase() || 'DIGITAL',version:'',quantity:1,unitUsd:outstandingUsd}],
+      currency,exchange_rate:rate,exchange_info:{mode:'quote_delivered',sourceQuote:q.number,quoteExchangeRateInfo:d.exchangeRateInfo || {},capturedAt:new Date().toISOString()},
+      paid_amount:C.round(grossUsd*rate),fee_amount:C.round(feeUsd*rate),payment_method:d.paymentMethod==='paypal'?'paypal':'other',transaction_ref:transactionRef,
+      notes:`Ingreso automático al marcar ${q.number} como Entregado.${previousUsd>0?' Se descontaron los recibos previos vinculados.':''}`};
+    r.client_id=await host.ensureClient(r);
+    const result=await host.cloud.from('receipts').insert(r).select().single();
+    if(result.error) {
+      if(result.error.code==='23505') {
+        const retry=await host.cloud.from('receipts').select('*').eq('user_id',user.id).eq('transaction_ref',transactionRef).order('issued_at',{ascending:false}).limit(1);
+        if(!retry.error && retry.data?.[0]) { records=[retry.data[0],...records.filter(x=>x.id!==retry.data[0].id)]; render(); return {record:retry.data[0],created:false}; }
+      }
+      throw result.error;
+    }
+    records=[result.data,...records.filter(x=>x.id!==result.data.id)];render();
+    return {record:result.data,created:true};
+  }
   function payload() {
     return {id:draftId,paid_date:$('#rDate').value,client_id:$('#rClient').value,source_quote_id:sourceQuote?.id || null,
       client:{name:$('#rName').value.trim(),email:$('#rEmail').value.trim(),phone:$('#rPhone').value.trim(),country:$('#rCountry').value},
@@ -139,13 +185,13 @@ window.JG3DReceipts = { create(host) {
     finally{if(epoch===generation){$('#receiptNew').disabled=!ready;$('#rSave').disabled=!ready;}}
   }
   function filtered() {
-    const q=$('#rfSearch').value.trim().toLowerCase();return records.filter(r=>(!$('#rfFrom').value || r.paid_date>=$('#rfFrom').value) && (!$('#rfTo').value || r.paid_date<=$('#rfTo').value) && (!$('#rfClient').value || r.client_id===$('#rfClient').value) && (!$('#rfMethod').value || r.payment_method===$('#rfMethod').value) && (!$('#rfCurrency').value || r.currency===$('#rfCurrency').value) && (!$('#rfState').value || r.status===$('#rfState').value) && (!$('#rfOrigin').value || (r.source_quote_id?'quote':'direct')===$('#rfOrigin').value) && [r.number,r.client.name,...r.items.map(i=>i.name)].join(' ').toLowerCase().includes(q));
+    const q=$('#rfSearch').value.trim().toLowerCase(),year=$('#rfYear').value;return records.filter(r=>(!year || String(r.paid_date||'').slice(0,4)===year) && (!$('#rfClient').value || r.client_id===$('#rfClient').value) && (!$('#rfMethod').value || r.payment_method===$('#rfMethod').value) && (!$('#rfCurrency').value || r.currency===$('#rfCurrency').value) && (!$('#rfState').value || r.status===$('#rfState').value) && (!$('#rfOrigin').value || (r.source_quote_id?'quote':'direct')===$('#rfOrigin').value) && [r.number,r.client.name,...r.items.map(i=>i.name)].join(' ').toLowerCase().includes(q));
   }
   function render() {
     const rows=filtered(),s=C.summarize(rows);
     $('#receiptMetrics').innerHTML=[['Pagos registrados',s.count],['Bruto',C.currency(s.gross)],['Comisiones',C.currency(s.fee)],['Neto',C.currency(s.net)]].map(([label,val])=>`<article class="metric-card"><span>${label}</span><strong>${val}</strong><small>Selección actual · sin anulados</small></article>`).join('');
     const group=$('#rfGroup').value,groups=new Map();
-    rows.filter(r=>r.status!=='void').forEach(r=>{const key=({month:r.paid_date.slice(0,7),country:r.client.country,client:r.client_id,method:r.payment_method,currency:r.currency})[group];if(!groups.has(key))groups.set(key,[]);groups.get(key).push(r);});
+    rows.filter(r=>r.status!=='void').forEach(r=>{const key=({year:r.paid_date.slice(0,4),month:r.paid_date.slice(0,7),country:r.client.country,client:r.client_id,method:r.payment_method,currency:r.currency})[group];if(!groups.has(key))groups.set(key,[]);groups.get(key).push(r);});
     $('#receiptGroups').innerHTML=[...groups].sort(([a],[b])=>a.localeCompare(b)).map(([key,rs])=>{const x=C.summarize(rs),label=group==='country'?C.country(key,'es'):group==='client'?rs[0].client.name:group==='method'?methods[key]:key;return `<tr><td>${e(label)}</td><td>${x.count}</td><td>${C.currency(x.gross)}</td><td>${C.currency(x.fee)}</td><td>${C.currency(x.net)}</td></tr>`;}).join('') || '<tr><td colspan="5">Sin pagos para esta selección.</td></tr>';
     $('#receiptRows').innerHTML=rows.map(r=>`<tr><td><strong>${e(r.number)}</strong><small>${e(r.paid_date)} · ${e(methods[r.payment_method])}</small></td><td>${e(r.client.name)}<small>${r.source_quote_id?'Desde presupuesto':'Archivos existentes'}</small></td><td>${C.currency(r.paid_amount,r.currency)}</td><td>${C.currency(r.fee_amount,r.currency)}</td><td>${C.currency(r.paid_amount-r.fee_amount,r.currency)}</td><td><span class="status-badge ${r.status==='void'?'draft':'delivered'}">${({paid:'Pagado',sent:'Enviado',void:'Anulado'})[r.status]}</span>${r.status==='void'?`<small>${e(r.void_reason)}</small>`:''}</td><td><div class="row-actions"><button class="row-button" type="button" data-r-pdf="${r.id}">PDF</button>${r.status!=='void'?`<button class="row-button" type="button" data-r-message="${r.id}">WhatsApp</button>${r.status==='paid'?`<button class="row-button" type="button" data-r-sent="${r.id}">Marcar enviado</button>`:''}<button class="row-button danger" type="button" data-r-void="${r.id}">Anular</button>`:''}</div></td></tr>`).join('');
     $('#receiptEmpty').hidden=rows.length>0;
@@ -175,12 +221,12 @@ window.JG3DReceipts = { create(host) {
   $('#rRate').oninput=()=>{fxInfo={mode:'manual'};calculation(true);$('#rConfirmed').checked=false;};
   $('#rPaid').oninput=()=>{const gross=C.amounts(items(),0,0,1).grossUsd;if(gross>0 && $('#rCurrency').value!=='USD')$('#rRate').value=(Number($('#rPaid').value)/gross).toFixed(10);fxInfo={mode:'actual_payment'};calculation();$('#rConfirmed').checked=false;};
   $('#rFee').oninput=()=>calculation();$('#rFetchRate').onclick=fetchRate;
-  document.querySelectorAll('[id^="rf"]').forEach(n=>{if(n.tagName!=='BUTTON')n.addEventListener('input',render);});
-  $('#rfClear').onclick=()=>{document.querySelectorAll('.receipt-filters input,.receipt-filters select').forEach(n=>{n.value=n.id==='rfGroup'?'month':'';});render();};
+  document.querySelectorAll('[id^="rf"]').forEach(n=>{if(n.tagName!=='BUTTON'){n.addEventListener('input',render);n.addEventListener('change',render);}});
+  $('#rfClear').onclick=()=>{document.querySelectorAll('.receipt-filters input,.receipt-filters select').forEach(n=>{n.value=n.id==='rfGroup'?'year':'';});render();};
   view.addEventListener('click',ev=>{const b=ev.target.closest('button');if(!b)return;const d=b.dataset,id=d.rPdf || d.rMessage || d.rSent || d.rVoid;if(!id)return;const r=records.find(x=>x.id===id);if(!r)return;if(d.rPdf)host.preview(r);if(d.rMessage)showMessage(r);if(d.rSent)changeStatus(id,'sent');if(d.rVoid)changeStatus(id,'void');});
   $('#receiptCopy').onclick=async()=>{try{await navigator.clipboard.writeText($('#receiptMessageText').value);host.toast('Mensaje copiado. Adjuntá el PDF al enviarlo.');}catch{$('#receiptMessageText').select();host.toast('Seleccioná y copiá el mensaje manualmente.');}};
   $('#receiptMessageClose').onclick=()=>{$('#receiptMessage').hidden=true;messageRecord=null;};
-  return { async start(u){user=u;await refresh();},stop(){generation++;user=null;ready=false;records=[];messageRecord=null;$('#receiptEditor').hidden=true;$('#receiptMessage').hidden=true;$('#receiptForm').reset();$('#rItems').replaceChildren();$('#receiptMessageText').value='';render();},refresh,openNew,
+  return { async start(u){user=u;await refresh();},stop(){generation++;user=null;ready=false;records=[];messageRecord=null;$('#receiptEditor').hidden=true;$('#receiptMessage').hidden=true;$('#receiptForm').reset();$('#rItems').replaceChildren();$('#receiptMessageText').value='';render();},refresh,openNew,createFromQuote,
     history(id){host.navigate('receipts');selects();$('#rfClear').click();$('#rfClient').value=id;render();},render(){selects();render();},
     document:r=>C.documentHTML(r,host.footer),message:C.message,
     preparePrint(r){

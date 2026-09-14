@@ -1035,13 +1035,26 @@
     $(".responsive-table", $("#view-history")).classList.toggle("hidden", filtered.length === 0);
   }
 
-  function updateQuoteStatus(id, status) {
+  async function updateQuoteStatus(id, status) {
     const record = quotes.find(item => item.id === id);
     if (!record) return;
+    const previousStatus = record.status;
     record.status = status;
     persist();
     renderDashboard();
     toast(`Estado actualizado: ${statusLabels[status]}.`);
+    if (status === "delivered" && previousStatus !== "delivered") {
+      try {
+        if (!receiptsApp?.createFromQuote) throw new Error("El módulo de recibos no está disponible.");
+        const result = await receiptsApp.createFromQuote(record);
+        toast(result.created
+          ? `Ingreso automático creado: ${result.record.number}.`
+          : `El ingreso de ${result.record.number} ya existía; no se duplicó.`);
+      } catch (error) {
+        console.error("Automatic delivered-income creation failed", error);
+        toast("Presupuesto entregado. No se pudo crear el ingreso automático; abrí Recibos e ingresos para reintentarlo.");
+      }
+    }
   }
 
   function deleteQuote(id) {
