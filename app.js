@@ -13,7 +13,7 @@
     renderRate: 5,
     personalization: 5,
     paymentThreshold: 50,
-    paypalPercent: 5.4,
+    paypalPercent: 6,
     paypalFixed: 0.30,
     validDays: 7,
     nextNumber: 1,
@@ -89,7 +89,11 @@
       const parsed = JSON.parse(localStorage.getItem(key));
       if (!parsed) return structuredClone(fallback);
       if (key === STORAGE.settings) {
-        return { ...structuredClone(defaults), ...parsed, rates: { ...defaults.rates, ...(parsed.rates || {}) } };
+        const merged = { ...structuredClone(defaults), ...parsed, rates: { ...defaults.rates, ...(parsed.rates || {}) } };
+        // The previous built-in default was 5.4%; migrate that untouched default
+        // to the new 6% estimate while keeping any other custom setting intact.
+        if (parsed.paypalPercent === 5.4) merged.paypalPercent = 6;
+        return merged;
       }
       return parsed;
     } catch {
@@ -401,13 +405,15 @@
     const installments = desiredNet >= settings.paymentThreshold ? 2 : 1;
 
     let grossUsd = desiredNet;
-    if (paymentMethod === "paypal" && desiredNet > 0) {
-      const rate = Math.min(.99, settings.paypalPercent / 100);
-      const netInstallment = desiredNet / installments;
-      grossUsd = installments * ((netInstallment + settings.paypalFixed) / (1 - rate));
+    let paymentFee = 0;
+    let actualNetUsd = desiredNet;
+    if (paymentMethod === "paypal") {
+      const enteredGross = numeric($("#paypalGrossUsd").value);
+      if (enteredGross > 0) grossUsd = enteredGross;
+      const rate = Math.min(.99, Math.max(0, settings.paypalPercent / 100));
+      paymentFee = grossUsd > 0 ? grossUsd * rate + Math.max(0, settings.paypalFixed) : 0;
+      actualNetUsd = Math.max(0, grossUsd - paymentFee);
     }
-
-    const paymentFee = Math.max(0, grossUsd - desiredNet);
     const finalConverted = grossUsd * exchangeRate;
     const deliverables = $$('input[name="deliverable"]:checked').map(input => input.value);
     const today = new Date();
@@ -457,6 +463,7 @@
         urgencyAmount,
         licenseFee,
         desiredNet,
+        actualNetUsd,
         installments,
         paymentFee,
         grossUsd,
@@ -468,6 +475,9 @@
   function updateCalculation() {
     const data = getQuoteData();
     const c = data.calculation;
+    const isPaypal = data.paymentMethod === "paypal";
+    $("#paypalGrossGroup").classList.toggle("hidden", !isPaypal);
+    $("#paypalGrossUsd").required = isPaypal;
     $("#sumModel").textContent = money(c.modelCost);
     $("#sumRender").textContent = money(c.renderCost);
     $("#sumDifficulty").textContent = money(c.difficultyAmount);
@@ -475,13 +485,16 @@
     $("#sumUrgency").textContent = money(c.urgencyAmount);
     $("#sumLicense").textContent = money(c.licenseFee);
     $("#sumPaymentFee").textContent = money(c.paymentFee);
-    $("#sumNet").textContent = money(c.desiredNet);
-    $("#displayCurrency").textContent = data.currency;
-    $("#finalPrice").textContent = new Intl.NumberFormat(data.currency === "ARS" ? "es-AR" : "en-US", { minimumFractionDigits: data.currency === "ARS" ? 0 : 2, maximumFractionDigits: data.currency === "ARS" ? 0 : 2 }).format(c.finalConverted);
-    $("#priceSubtitle").textContent = data.paymentMethod === "paypal" ? "Importe final con costos de cobro incluidos" : "Importe final para el cliente";
+    $("#sumNetLabel").textContent = isPaypal ? "Neto estimado después de PayPal" : "Neto deseado";
+    $("#sumNet").textContent = money(isPaypal ? c.actualNetUsd : c.desiredNet);
+    const displayCurrency = isPaypal ? "USD" : data.currency;
+    const displayAmount = isPaypal ? c.grossUsd : c.finalConverted;
+    $("#displayCurrency").textContent = displayCurrency;
+    $("#finalPrice").textContent = new Intl.NumberFormat(displayCurrency === "ARS" ? "es-AR" : "en-US", { minimumFractionDigits: displayCurrency === "ARS" ? 0 : 2, maximumFractionDigits: displayCurrency === "ARS" ? 0 : 2 }).format(displayAmount);
+    $("#priceSubtitle").textContent = isPaypal ? "Monto bruto del enlace PayPal" : "Importe final para el cliente";
     $("#paymentPlan").innerHTML = c.installments === 2
-      ? `<span>Forma de pago</span><strong>50% para comenzar: ${money(c.finalConverted / 2, data.currency)}<br>50% antes de entregar: ${money(c.finalConverted / 2, data.currency)}</strong>`
-      : `<span>Forma de pago</span><strong>100% antes de comenzar: ${money(c.finalConverted, data.currency)}</strong>`;
+      ? `<span>Forma de pago</span><strong>50% para comenzar: ${isPaypal ? money(c.grossUsd / 2, "USD") : money(c.finalConverted / 2, data.currency)}<br>50% antes de entregar: ${isPaypal ? money(c.grossUsd / 2, "USD") : money(c.finalConverted / 2, data.currency)}</strong>`
+      : `<span>Forma de pago</span><strong>100% antes de comenzar: ${isPaypal ? money(c.grossUsd, "USD") : money(c.finalConverted, data.currency)}</strong>`;
     if (rateState.mode === "automatic" && rateState.status !== "ready") {
       $("#finalPrice").textContent = "—";
       $("#priceSubtitle").textContent = rateState.status === "pending" ? "Consultando tipo de cambio…" : "Falta confirmar el tipo de cambio";
@@ -542,12 +555,13 @@
       }
     }[documentLanguage];
     const urgencyText = data.urgencyPercent === 40 ? labels.urgent : data.urgencyPercent === 20 ? labels.priority : labels.normal;
-    const brazilPaypal = data.country === "BR" && data.paymentMethod === "paypal";
-    const payableTotal = brazilPaypal ? data.calculation.grossUsd : data.calculation.finalConverted;
-    const payableCurrency = brazilPaypal ? "USD" : data.currency;
-    const payableText = brazilPaypal ? moneyWithCode(payableTotal, "USD") : money(payableTotal, payableCurrency);
+    const paypalPayment = data.paymentMethod === "paypal";
+    const brazilPaypal = data.country === "BR" && paypalPayment;
+    const payableTotal = paypalPayment ? data.calculation.grossUsd : data.calculation.finalConverted;
+    const payableCurrency = paypalPayment ? "USD" : data.currency;
+    const payableText = paypalPayment ? moneyWithCode(payableTotal, "USD") : money(payableTotal, payableCurrency);
     const paymentText = data.calculation.installments === 2
-      ? `50% (${brazilPaypal ? moneyWithCode(payableTotal / 2, "USD") : money(payableTotal / 2, payableCurrency)}) + 50% (${brazilPaypal ? moneyWithCode(payableTotal / 2, "USD") : money(payableTotal / 2, payableCurrency)})`
+      ? `50% (${paypalPayment ? moneyWithCode(payableTotal / 2, "USD") : money(payableTotal / 2, payableCurrency)}) + 50% (${paypalPayment ? moneyWithCode(payableTotal / 2, "USD") : money(payableTotal / 2, payableCurrency)})`
       : `100% ${payableText}`;
     const brlReference = brazilPaypal ? money(data.calculation.finalConverted, "BRL") : "";
     const scope = data.scope || (documentLanguage === "pt" ? "Modelagem 3D conforme as referências e medidas fornecidas pelo cliente." : documentLanguage === "en" ? "3D modeling according to the references and measurements supplied by the client." : "Modelado 3D según las referencias y medidas suministradas por el cliente.");
@@ -579,7 +593,7 @@
       <section class="doc-section"><h3>${labels.scope}</h3><p>${escapeHtml(scope).replace(/\n/g, "<br>")}</p></section>
       <section class="doc-section"><h3>${labels.deliverables}</h3><ul>${deliverables.map(item => `<li>${escapeHtml(item)}</li>`).join("")}</ul></section>
       <section class="doc-section"><h3>${labels.conditions}</h3><ul><li>${data.revisions} ${labels.revisions}.</li><li>${escapeHtml(data.notes || defaultCondition)}</li><li>${documentLanguage === "pt" ? "A entrega dos arquivos finais é realizada após a confirmação do pagamento." : documentLanguage === "en" ? "Final files are delivered after payment confirmation." : "Los archivos finales se entregan después de confirmar el pago."}</li></ul></section>
-      <div class="doc-total"><div><span>${brazilPaypal ? labels.paypalTotal : labels.total}</span><strong>${payableText}</strong>${brazilPaypal ? `<small class="doc-price-reference">${labels.reference}: ${brlReference}</small>` : ""}</div><div class="doc-payment"><span>${labels.payment}</span><p>${paymentText}<br>${escapeHtml(paymentMethodText)}</p></div></div>
+      <div class="doc-total"><div><span>${paypalPayment ? labels.paypalTotal : labels.total}</span><strong>${payableText}</strong>${brazilPaypal ? `<small class="doc-price-reference">${labels.reference}: ${brlReference}</small>` : ""}</div><div class="doc-payment"><span>${labels.payment}</span><p>${paymentText}<br>${escapeHtml(paymentMethodText)}</p></div></div>
       ${documentFooter(labels)}`;
   }
 
@@ -663,9 +677,10 @@
     if (record.kind === 'receipt') return receiptsApp.message(record.receipt);
     const data = record.data || record;
     const number = record.number || quoteNumber();
-    const brazilPaypal = data.country === "BR" && data.paymentMethod === "paypal";
-    const total = brazilPaypal ? moneyWithCode(data.calculation.grossUsd, "USD") : money(data.calculation.finalConverted, data.currency);
-    const totalLabel = brazilPaypal
+    const paypalPayment = data.paymentMethod === "paypal";
+    const brazilPaypal = data.country === "BR" && paypalPayment;
+    const total = paypalPayment ? moneyWithCode(data.calculation.grossUsd, "USD") : money(data.calculation.finalConverted, data.currency);
+    const totalLabel = paypalPayment
       ? (data.language === "pt" ? "Total a pagar via PayPal" : data.language === "en" ? "Total payable via PayPal" : "Total a pagar por PayPal")
       : "Total";
     const referenceLine = brazilPaypal
@@ -700,6 +715,11 @@
     if (!$("#clientName").value.trim()) {
       $("#clientName").focus();
       toast("Ingresá el nombre o empresa del cliente.");
+      return;
+    }
+    if ($("#paymentMethod").value === "paypal" && !(numeric($("#paypalGrossUsd").value) > 0)) {
+      $("#paypalGrossUsd").focus();
+      toast("Ingresá el monto bruto que vas a colocar en el enlace de PayPal.");
       return;
     }
     const data = getQuoteData();
