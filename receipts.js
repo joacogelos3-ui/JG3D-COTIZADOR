@@ -118,14 +118,14 @@ window.JG3DReceipts = { create(host) {
     if(existing.error) throw existing.error;
     const quoteReceipts=existing.data || [];
     const existingAuto=quoteReceipts.find(r=>r.transaction_ref===transactionRef && r.status!=='void');
-    if(existingAuto) { records=[existingAuto,...records.filter(r=>r.id!==existingAuto.id)]; render(); return {record:existingAuto,created:false}; }
+    if(existingAuto) { records=[existingAuto,...records.filter(r=>r.id!==existingAuto.id)]; selects(); render(); return {record:existingAuto,created:false}; }
     const grossUsd=C.round(Number(d.calculation?.grossUsd || 0));
     if(!(grossUsd>0)) throw Error('El presupuesto no tiene un total positivo.');
     const previousUsd=C.round(quoteReceipts.filter(r=>r.status!=='void').reduce((sum,r)=>sum+Number(r.gross_usd || 0),0));
     const outstandingUsd=C.round(Math.max(0,grossUsd-previousUsd));
     if(outstandingUsd<=0.01) {
       const latest=quoteReceipts.find(r=>r.status!=='void') || quoteReceipts[0] || null;
-      if(latest) { records=[latest,...records.filter(r=>r.id!==latest.id)]; render(); return {record:latest,created:false}; }
+      if(latest) { records=[latest,...records.filter(r=>r.id!==latest.id)]; selects(); render(); return {record:latest,created:false}; }
       throw Error('El presupuesto ya está completamente registrado en recibos.');
     }
     const currency=d.paymentMethod==='paypal'?'USD':(d.currency || 'USD');
@@ -143,11 +143,11 @@ window.JG3DReceipts = { create(host) {
     if(result.error) {
       if(result.error.code==='23505') {
         const retry=await host.cloud.from('receipts').select('*').eq('user_id',user.id).eq('transaction_ref',transactionRef).order('issued_at',{ascending:false}).limit(1);
-        if(!retry.error && retry.data?.[0]) { records=[retry.data[0],...records.filter(x=>x.id!==retry.data[0].id)]; render(); return {record:retry.data[0],created:false}; }
+        if(!retry.error && retry.data?.[0]) { records=[retry.data[0],...records.filter(x=>x.id!==retry.data[0].id)]; selects(); render(); return {record:retry.data[0],created:false}; }
       }
       throw result.error;
     }
-    records=[result.data,...records.filter(x=>x.id!==result.data.id)];render();
+    records=[result.data,...records.filter(x=>x.id!==result.data.id)];selects();render();
     return {record:result.data,created:true};
   }
   function payload() {
@@ -170,7 +170,7 @@ window.JG3DReceipts = { create(host) {
         const result=await host.cloud.from('receipts').insert(r).select().single();if(result.error)throw result.error;saved=result.data;
       }
       if(epoch!==generation || user?.id!==opUser)return;
-      records=[saved,...records.filter(x=>x.id!==saved.id)];$('#receiptEditor').hidden=true;draftId=null;render();host.preview(saved);host.toast(`Recibo ${saved.number} guardado en Supabase.`);
+      records=[saved,...records.filter(x=>x.id!==saved.id)];$('#receiptEditor').hidden=true;draftId=null;selects();render();host.preview(saved);host.toast(`Recibo ${saved.number} guardado en Supabase.`);
     }catch(error){$('#rError').textContent=error.code==='23505'?'Ya existe un recibo para esa operación. Revisá el historial antes de volver a guardarlo.':`No se guardó el recibo: ${error.message || 'revisá tu conexión e intentá nuevamente.'}`;}
     finally{busy=false;$('#rSave').disabled=!ready;}
   }
