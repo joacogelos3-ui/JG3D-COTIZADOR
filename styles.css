@@ -244,6 +244,14 @@ input::placeholder, textarea::placeholder { color: #565660; }
 
 .input-suffix, .input-prefix { display: grid; align-items: center; margin-top: 7px; border: 1px solid var(--line-strong); border-radius: 9px; overflow: hidden; background: #0c0c0f; }
 .input-suffix { grid-template-columns: 1fr auto; }
+.exchange-control { min-width: 0; font-size: 12px; font-weight: 700; }
+.exchange-control > label { display: block; }
+.exchange-control > .sr-only { position: absolute; width: 1px; height: 1px; padding: 0; overflow: hidden; clip-path: inset(50%); white-space: nowrap; }
+.exchange-control small { display: block; margin-top: 8px; color: var(--muted-2); font-size: 11px; font-weight: 400; line-height: 1.5; overflow-wrap: anywhere; }
+.exchange-control .secondary-button { width: 100%; margin-top: 10px; height: auto; padding: 10px; }
+.exchange-control a { color: var(--text); text-decoration: underline; }
+.exchange-control[data-state="error"] #exchangeRateHelp { color: #ffb3b6; }
+button:disabled { opacity: .55; cursor: wait; }
 .input-prefix { grid-template-columns: auto 1fr; }
 .input-suffix input, .input-prefix input { margin: 0; border: 0; border-radius: 0; }
 .input-suffix span, .input-prefix span { padding: 0 11px; color: var(--muted-2); font-size: 10px; font-weight: 800; }

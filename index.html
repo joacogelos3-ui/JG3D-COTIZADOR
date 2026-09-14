@@ -8,10 +8,10 @@
   <title>JG3D · Cotizador interno</title>
   <meta name="description" content="Cotizador interno de proyectos de modelado 3D de JG3D Works">
   <link rel="preconnect" href="https://raw.githubusercontent.com">
-  <link rel="stylesheet" href="styles.css?v=20260913-client-a4">
+  <link rel="stylesheet" href="styles.css?v=20260914-auto-rates">
   <script defer src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.min.js"></script>
   <script defer src="supabase-config.js"></script>
-  <script defer src="app.js?v=20260913-client-a4"></script>
+  <script defer src="app.js?v=20260914-auto-rates"></script>
 </head>
 <body>
   <section class="auth-gate" id="authGate" aria-labelledby="authTitle">
@@ -246,10 +246,15 @@
                 <label>Forma de cobro
                   <select id="paymentMethod"><option value="paypal">PayPal</option><option value="other">Transferencia / otro medio</option></select>
                 </label>
-                <label>Tipo de cambio manual — 1 USD
+                <div class="exchange-control">
+                  <label for="exchangeMode">Tipo de cambio — 1 USD</label>
+                  <select id="exchangeMode"><option value="automatic">Automático (blue venta / referencia BRL)</option><option value="manual">Manual para este presupuesto</option></select>
+                  <label class="sr-only" for="exchangeRate">Valor de 1 USD en la moneda seleccionada</label>
                   <div class="input-suffix"><input id="exchangeRate" type="number" min="0.0001" step="any" required value="1" aria-describedby="exchangeRateHelp"><span id="currencySuffix">USD</span></div>
-                  <small id="exchangeRateHelp">Se carga desde Configuración. Podés ajustarlo solo para este presupuesto; no se actualiza automáticamente.</small>
-                </label>
+                  <small id="exchangeRateHelp" role="status" aria-live="polite">Se consultará la última cotización disponible. Podés cambiar a modo manual.</small>
+                  <button id="refreshExchangeRate" class="secondary-button" type="button">Actualizar cambio automático</button>
+                  <small class="exchange-attribution">Fuentes: <a href="https://dolarapi.com/docs/argentina/operations/get-dolar-blue" target="_blank" rel="noopener noreferrer">DolarAPI · blue venta</a> · <a href="https://www.exchangerate-api.com" target="_blank" rel="noopener noreferrer">Rates By Exchange Rate API</a>. BRL es orientativo; PayPal puede aplicar otro cambio.</small>
+                </div>
                 <label>Validez
                   <div class="input-suffix"><input id="validDays" type="number" min="1" step="1" value="7"><span>días</span></div>
                 </label>
@@ -341,8 +346,8 @@
             </div>
           </article>
           <article class="panel-card form-section span-settings">
-            <h3>Tipos de cambio manuales</h3>
-            <p class="section-copy">Estos valores se guardan en tu cuenta y se cargan al elegir la moneda del presupuesto. No se actualizan automáticamente: revisalos antes de cotizar. Los valores iniciales son orientativos, no cotizaciones vigentes.</p>
+            <h3>Respaldo de tipos de cambio manuales</h3>
+            <p class="section-copy">El presupuesto consulta automáticamente el dólar blue de venta para ARS y una referencia diaria USD/BRL. Estos valores se guardan en tu cuenta y se usan solo si elegís modo manual: no son cotizaciones vigentes. Cada presupuesto guardado conserva su tipo de cambio original.</p>
             <div class="form-grid three">
               <label>1 USD en USD<input id="settingUsdRate" type="number" min="0.0001" step="any" required></label>
               <label>1 USD en BRL<input id="settingBrlRate" type="number" min="0.0001" step="any" required></label>

@@ -4,7 +4,8 @@
   const STORAGE = {
     clients: "jg3d_quote_clients_v1",
     quotes: "jg3d_quotes_v1",
-    settings: "jg3d_quote_settings_v1"
+    settings: "jg3d_quote_settings_v1",
+    fx: "jg3d_quote_fx_v1"
   };
 
   const defaults = {
@@ -69,6 +70,15 @@
   let cloudSyncTimer = null;
   let suppressCloudSync = false;
   let appStarted = false;
+  const rateProviders = {
+    ARS: { url: "https://dolarapi.com/v1/dolares/blue", source: "DolarAPI · dólar blue venta", ttl: 5 * 60 * 1000, maxAge: 7 * 86400000 },
+    BRL: { url: "https://open.er-api.com/v6/latest/USD", source: "ExchangeRate-API · referencia USD/BRL", ttl: 60 * 60 * 1000, maxAge: 3 * 86400000 }
+  };
+  const storedRateCache = load(STORAGE.fx, {});
+  const rateCache = storedRateCache && typeof storedRateCache === "object" && !Array.isArray(storedRateCache) ? storedRateCache : {};
+  const rateRequests = new Map();
+  let rateGeneration = 0;
+  let rateState = { mode: "manual", status: "ready", metadata: null };
 
   const $ = (selector, root = document) => root.querySelector(selector);
   const $$ = (selector, root = document) => [...root.querySelectorAll(selector)];
@@ -333,6 +343,7 @@
     if (viewName === "clients") renderClients();
     if (viewName === "history") renderQuotes();
     if (viewName === "settings") populateSettings();
+    if (viewName === "quote") refreshRateIfNeeded();
     window.scrollTo({ top: 0, behavior: "smooth" });
   }
 
@@ -395,6 +406,7 @@
       revisions: Math.max(0, numeric($("#revisions").value)),
       paymentMethod,
       exchangeRate,
+      exchangeRateInfo: { ...structuredClone(rateState.metadata || {}), mode: rateState.mode, currency, rate: exchangeRate },
       validDays,
       validUntil: validUntil.toISOString(),
       notes: $("#notes").value.trim(),
@@ -438,6 +450,11 @@
     $("#paymentPlan").innerHTML = c.installments === 2
       ? `<span>Forma de pago</span><strong>50% para comenzar: ${money(c.finalConverted / 2, data.currency)}<br>50% antes de entregar: ${money(c.finalConverted / 2, data.currency)}</strong>`
       : `<span>Forma de pago</span><strong>100% antes de comenzar: ${money(c.finalConverted, data.currency)}</strong>`;
+    if (rateState.mode === "automatic" && rateState.status !== "ready") {
+      $("#finalPrice").textContent = "—";
+      $("#priceSubtitle").textContent = rateState.status === "pending" ? "Consultando tipo de cambio…" : "Falta confirmar el tipo de cambio";
+      $("#paymentPlan").textContent = "El total en USD se mantiene; falta la conversión local.";
+    }
   }
 
   function quoteNumber(number = settings.nextNumber) {
@@ -524,6 +541,7 @@
   }
 
   function openPreview(record = null) {
+    if (!record && !quoteRateReady()) return;
     $("#quotePrintSheet")?.remove();
     currentPreview = record || { number: quoteNumber(), createdAt: new Date().toISOString(), data: getQuoteData() };
     $("#quoteDocument").innerHTML = buildDocument(currentPreview);
@@ -624,6 +642,7 @@
 
   function saveQuote(event) {
     event.preventDefault();
+    if (!quoteRateReady()) return;
     if (!$("#projectTitle").value.trim()) {
       $("#projectTitle").focus();
       toast("Ingresá un título para el proyecto.");
@@ -661,6 +680,7 @@
     $("#country").value = "BR";
     $("#language").value = "pt";
     $("#currency").value = "BRL";
+    $("#exchangeMode").value = "automatic";
     $("#validDays").value = settings.validDays;
     setCurrencyRate();
     updateCalculation();
@@ -678,11 +698,120 @@
     setCurrencyRate();
   }
 
-  function setCurrencyRate() {
+  function setManualRate(keepValue = false) {
+    rateGeneration += 1;
     const currency = $("#currency").value;
-    $("#exchangeRate").value = settings.rates[currency] || 1;
-    $("#currencySuffix").textContent = currency;
+    $("#exchangeMode").value = "manual";
+    if (!keepValue) $("#exchangeRate").value = currency === "USD" ? 1 : settings.rates[currency] || 1;
+    rateState = { mode: "manual", status: "ready", metadata: { source: "Manual", updatedAt: new Date().toISOString() } };
+    renderRateStatus("Cambio manual: revisá este valor antes de guardar. No se actualiza automáticamente.");
     updateCalculation();
+  }
+
+  function renderRateStatus(message) {
+    $("#exchangeRateHelp").textContent = message;
+    $(".exchange-control").dataset.state = rateState.status;
+    $("#currencySuffix").textContent = $("#currency").value;
+    $("#refreshExchangeRate").disabled = rateState.status === "pending";
+    const blocked = rateState.mode === "automatic" && rateState.status !== "ready";
+    $("#saveQuote").disabled = blocked;
+    $("#printPreview").disabled = blocked;
+  }
+
+  function validRateRecord(record, currency) {
+    const now = Date.now();
+    return record && record.currency === currency && Number.isFinite(record.rate) && record.rate >= .0001 &&
+      Number.isFinite(Date.parse(record.updatedAt)) && Date.parse(record.updatedAt) <= now + 300000 &&
+      now - Date.parse(record.updatedAt) <= rateProviders[currency].maxAge &&
+      Number.isFinite(Date.parse(record.fetchedAt)) && Date.parse(record.fetchedAt) <= now + 300000;
+  }
+
+  function cachedRateIsFresh(record, currency) {
+    return validRateRecord(record, currency) && Date.now() - Date.parse(record.fetchedAt) < rateProviders[currency].ttl &&
+      (!record.nextUpdateAt || Date.now() < record.nextUpdateAt ||
+        (record.nextUpdateAt <= Date.parse(record.fetchedAt) && Date.now() - Date.parse(record.fetchedAt) < 300000));
+  }
+
+  async function fetchCurrencyRate(currency, force = false) {
+    const cached = rateCache[currency];
+    if (!force && cachedRateIsFresh(cached, currency)) return structuredClone(cached);
+    if (rateRequests.has(currency)) return rateRequests.get(currency);
+    const request = (async () => {
+      const controller = new AbortController();
+      const timeout = setTimeout(() => controller.abort(), 12000);
+      try {
+        const response = await fetch(rateProviders[currency].url, { signal: controller.signal, credentials: "omit" });
+        if (!response.ok) throw new Error(response.status === 429 ? "Límite de consultas del proveedor; intentá más tarde." : "El proveedor no respondió correctamente.");
+        const data = await response.json();
+        if (currency === "BRL" && (data.result !== "success" || data.base_code !== "USD")) throw new Error("Respuesta de cambio no válida.");
+        if (currency === "ARS" && data.casa !== "blue") throw new Error("La respuesta no corresponde al dólar blue.");
+        const record = {
+          currency, rate: currency === "ARS" ? data.venta : data.rates?.BRL,
+          source: rateProviders[currency].source,
+          updatedAt: currency === "ARS" ? data.fechaActualizacion : new Date(data.time_last_update_unix * 1000).toISOString(),
+          fetchedAt: new Date().toISOString(),
+          nextUpdateAt: currency === "BRL" && Number.isFinite(data.time_next_update_unix) ? data.time_next_update_unix * 1000 : null
+        };
+        if (!validRateRecord(record, currency)) throw new Error("La cotización recibida es inválida o demasiado antigua.");
+        rateCache[currency] = record;
+        try { localStorage.setItem(STORAGE.fx, JSON.stringify(rateCache)); } catch { /* El cambio puede usarse sin caché. */ }
+        return structuredClone(record);
+      } finally { clearTimeout(timeout); }
+    })();
+    rateRequests.set(currency, request);
+    try { return await request; } finally { rateRequests.delete(currency); }
+  }
+
+  async function setCurrencyRate(force = false) {
+    // DOM change events are not a request to bypass the cache.
+    force = force === true;
+    const currency = $("#currency").value;
+    if ($("#exchangeMode").value === "manual") { setManualRate(); return; }
+    const generation = ++rateGeneration;
+    rateState = { mode: "automatic", status: "pending", metadata: null };
+    $("#exchangeRate").value = "";
+    renderRateStatus("Consultando la última cotización disponible…");
+    updateCalculation();
+    try {
+      const record = currency === "USD"
+        ? { currency, rate: 1, source: "Moneda base USD", updatedAt: new Date().toISOString(), fetchedAt: new Date().toISOString() }
+        : await fetchCurrencyRate(currency, force);
+      if (generation !== rateGeneration || currency !== $("#currency").value || $("#exchangeMode").value === "manual") return;
+      $("#exchangeRate").value = record.rate;
+      rateState = { mode: "automatic", status: "ready", metadata: record };
+      const date = new Intl.DateTimeFormat("es-AR", { dateStyle: "short", timeStyle: "short" }).format(new Date(record.updatedAt));
+      renderRateStatus(`${record.source}. Última cotización: ${date}. Se conserva la última disponible durante cierres de mercado.`);
+    } catch (error) {
+      if (generation !== rateGeneration) return;
+      rateState = { mode: "automatic", status: "error", metadata: null };
+      renderRateStatus(`No se pudo actualizar el cambio. ${error.message} Reintentá o elegí modo manual; no se usará un valor viejo como vigente.`);
+    }
+    updateCalculation();
+  }
+
+  function refreshRateIfNeeded() {
+    if (!appStarted || rateState.mode !== "automatic" || rateState.status !== "ready") return;
+    const currency = $("#currency").value;
+    if (currency !== "USD" && !cachedRateIsFresh(rateState.metadata, currency)) setCurrencyRate();
+  }
+
+  function quoteRateReady() {
+    const currency = $("#currency").value;
+    if (rateState.mode === "automatic" && rateState.status === "ready" && currency !== "USD" && !cachedRateIsFresh(rateState.metadata, currency)) {
+      setCurrencyRate();
+      toast("El cambio necesita actualizarse. Esperá la consulta y volvé a guardar o generar el PDF.");
+      return false;
+    }
+    if (rateState.mode === "automatic" && rateState.status !== "ready") {
+      toast("Actualizá el tipo de cambio o ingresalo en modo manual antes de guardar o generar el PDF.");
+      return false;
+    }
+    if (!Number.isFinite(Number($("#exchangeRate").value)) || Number($("#exchangeRate").value) < .0001) {
+      $("#exchangeRate").focus();
+      toast("Ingresá un tipo de cambio positivo válido.");
+      return false;
+    }
+    return true;
   }
 
   function populateClientSelect() {
@@ -932,6 +1061,16 @@
     $("#quoteForm").addEventListener("submit", saveQuote);
     $("#country").addEventListener("change", setCountryDefaults);
     $("#currency").addEventListener("change", setCurrencyRate);
+    $("#exchangeMode").addEventListener("change", () => {
+      if ($("#exchangeMode").value === "manual") setManualRate(Boolean($("#exchangeRate").value));
+      else setCurrencyRate();
+    });
+    $("#exchangeRate").addEventListener("input", () => setManualRate(true));
+    $("#refreshExchangeRate").addEventListener("click", () => {
+      $("#exchangeMode").value = "automatic";
+      setCurrencyRate(true);
+    });
+    setInterval(refreshRateIfNeeded, 60000);
     $("#quoteClient").addEventListener("change", selectClient);
     $("#clientType").addEventListener("change", () => {
       if ($("#clientType").value === "new" && $("#quoteClient").value) {
