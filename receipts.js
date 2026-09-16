@@ -239,7 +239,7 @@ window.JG3DReceipts = { create(host) {
   $('#receiptCopy').onclick=async()=>{try{await navigator.clipboard.writeText($('#receiptMessageText').value);host.toast('Mensaje copiado. Adjuntá el PDF al enviarlo.');}catch{$('#receiptMessageText').select();host.toast('Seleccioná y copiá el mensaje manualmente.');}};
   $('#receiptMessageClose').onclick=()=>{$('#receiptMessage').hidden=true;messageRecord=null;};
   return { async start(u){user=u;await refresh();},stop(){generation++;user=null;ready=false;records=[];messageRecord=null;$('#receiptEditor').hidden=true;$('#receiptMessage').hidden=true;$('#receiptForm').reset();$('#rItems').replaceChildren();$('#receiptMessageText').value='';render();},refresh,openNew,createFromQuote,
-    summary(year=''){return C.summarize(records.filter(r=>!year||String(r.paid_date||'').slice(0,4)===String(year)));},
+    summary(period=''){const value=String(period||'');return C.summarize(records.filter(r=>!value||String(r.paid_date||'').slice(0,value.length)===value));},
     history(id){host.navigate('receipts');selects();$('#rfClear').click();$('#rfClient').value=id;render();},render(){selects();render();},
     document:r=>C.documentHTML(r,host.footer),message:C.message,
     preparePrint(r){

@@ -3,7 +3,8 @@ window.JG3DCults = { create(host) {
   'use strict';
   const $=s=>document.querySelector(s), esc=v=>String(v??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#039;'}[c]));
   let user=null,records=[],syncState=null,busy=false,ready=false,page=0,eurUsd=0,rateLabel='Sin referencia EUR/USD';
-  const pageSize=50,currentYear=String(new Date().getFullYear());
+  const pageSize=50,currentYear=String(new Date().getFullYear()),currentMonth=String(new Date().getMonth()+1).padStart(2,'0');
+  const monthNames=['Enero','Febrero','Marzo','Abril','Mayo','Junio','Julio','Agosto','Septiembre','Octubre','Noviembre','Diciembre'];
   const money=(value,code='EUR')=>`${code} ${Number(value||0).toLocaleString('es-AR',{minimumFractionDigits:2,maximumFractionDigits:2})}`;
   const sum=rows=>rows.reduce((s,r)=>{s.count++;s.gross+=Number(r.gross_excluding_tax||0);s.fee+=Number(r.commission||0);s.net+=Number(r.net_income||0);if(r.paid_out_at)s.paid+=Number(r.net_income||0);else s.pending+=Number(r.net_income||0);return s;},{count:0,gross:0,fee:0,net:0,paid:0,pending:0});
   const saleYear=r=>String(r.sold_at||'').slice(0,4);
@@ -25,16 +26,18 @@ window.JG3DCults = { create(host) {
   document.querySelector('.main-content').appendChild(view);
 
   const dash=document.createElement('article');dash.className='panel-card income-overview';dash.id='incomeOverview';
-  dash.innerHTML=`<div class="panel-heading"><div><span class="eyebrow">BALANCE DE INGRESOS</span><h2>Cults + ventas directas</h2></div><label>Año<select id="incomeYear"></select></label></div><div class="income-metrics" id="incomeMetrics"></div><p class="section-copy" id="incomeRateNote"></p>`;
+  dash.innerHTML=`<div class="panel-heading"><div><span class="eyebrow">BALANCE DE INGRESOS</span><h2>Cults + ventas directas</h2></div><div class="income-period"><label>Año<select id="incomeYear"></select></label><label>Mes<select id="incomeMonth"><option value="">Todo el año</option>${monthNames.map((name,index)=>`<option value="${String(index+1).padStart(2,'0')}">${name}</option>`).join('')}</select></label></div></div><div class="income-metrics" id="incomeMetrics"></div><p class="section-copy" id="incomeRateNote"></p><div class="table-card income-history"><div class="responsive-table"><table><thead><tr><th>Mes</th><th>Cults neto EUR</th><th>Cults ≈ USD</th><th>Ventas por fuera USD</th><th>Total USD</th><th>Variación</th></tr></thead><tbody id="incomeMonths"></tbody></table></div></div>`;
   const dashboardGrid=$('#view-dashboard .metrics-grid');dashboardGrid.insertAdjacentElement('afterend',dash);
 
   function years() {
-    const selectedView=$('#cfYear').value,selectedDash=$('#incomeYear').value || currentYear;
+    const incomeReady=$('#incomeYear').options.length>0;
+    const selectedView=$('#cfYear').value,selectedDash=incomeReady?$('#incomeYear').value:currentYear,selectedMonth=incomeReady?$('#incomeMonth').value:currentMonth;
     const values=new Set([currentYear,...records.map(saleYear).filter(Boolean)]),list=[...values].sort((a,b)=>b.localeCompare(a));
     $('#cfYear').innerHTML='<option value="">Todos los años</option>'+list.map(y=>`<option value="${y}">${y}</option>`).join('');
     $('#incomeYear').innerHTML='<option value="">Todos</option>'+list.map(y=>`<option value="${y}">${y}</option>`).join('');
     $('#cfYear').value=values.has(selectedView)?selectedView:'';
     $('#incomeYear').value=selectedDash===''||values.has(selectedDash)?selectedDash:currentYear;
+    $('#incomeMonth').value=selectedMonth;
     const country=$('#cfCountry').value, countries=new Map();records.forEach(r=>{if(r.country_code)countries.set(r.country_code,`${r.country_flag||''} ${r.country_name||r.country_code}`.trim());});
     $('#cfCountry').innerHTML='<option value="">Todos los países</option>'+[...countries].sort((a,b)=>a[1].localeCompare(b[1])).map(([code,label])=>`<option value="${esc(code)}">${esc(label)}</option>`).join('');
     if(countries.has(country))$('#cfCountry').value=country;
@@ -43,13 +46,32 @@ window.JG3DCults = { create(host) {
     const year=$('#cfYear').value,q=$('#cfSearch').value.trim().toLowerCase(),payout=$('#cfPayout').value,country=$('#cfCountry').value;
     return records.filter(r=>r.is_active!==false&&(!year||saleYear(r)===year)&&(!country||r.country_code===country)&&(!payout||(payout==='paid'?!!r.paid_out_at:!r.paid_out_at))&&[r.product_name,r.buyer_nick,r.country_name].join(' ').toLowerCase().includes(q));
   }
+  const periodRows=period=>records.filter(r=>r.is_active!==false&&(!period||String(r.sold_at||'').slice(0,period.length)===period));
+  function previousPeriod(period) {
+    if(/^\d{4}-\d{2}$/.test(period)){const [year,month]=period.split('-').map(Number),date=new Date(Date.UTC(year,month-2,1));return `${date.getUTCFullYear()}-${String(date.getUTCMonth()+1).padStart(2,'0')}`;}
+    if(/^\d{4}$/.test(period))return String(Number(period)-1);
+    return '';
+  }
+  function periodLabel(period) {
+    if(/^\d{4}-\d{2}$/.test(period)){const [year,month]=period.split('-');return `${monthNames[Number(month)-1]} ${year}`;}
+    return period||'todo el historial';
+  }
+  function variation(current,previous,short=false) {
+    if(!(previous>0))return current>0?`Nuevo${short?'':' · sin ingresos en el período anterior'}`:'Sin cambios';
+    const percent=(current-previous)/previous*100,arrow=percent>0.05?'↑':percent<-0.05?'↓':'→';
+    return `${arrow} ${Math.abs(percent).toLocaleString('es-AR',{minimumFractionDigits:1,maximumFractionDigits:1})}%${short?'':' vs. período anterior'}`;
+  }
   function renderDashboard() {
     if(!$('#incomeMetrics'))return;
-    const year=$('#incomeYear').value,cultsRows=records.filter(r=>r.is_active!==false&&(!year||saleYear(r)===year)),cults=sum(cultsRows),direct=host.directSummary(year),cultsUsd=eurUsd?cults.net*eurUsd:0,total=direct.net+cultsUsd;
-    $('#incomeMetrics').innerHTML=`<article class="metric-card income-total"><span>Ingresos totales</span><strong>${eurUsd?money(total,'USD'):'—'}</strong><small>Cults neto + ventas directas netas</small></article>
-      <article class="metric-card"><span>Ventas Cults</span><strong>${money(cults.net,'EUR')}</strong><small>${eurUsd?`≈ ${money(cultsUsd,'USD')} · `:''}${cults.count} ventas</small></article>
-      <article class="metric-card"><span>Ventas por fuera</span><strong>${money(direct.net,'USD')}</strong><small>${direct.count} recibos válidos · incluye presupuestos entregados</small></article>`;
-    $('#incomeRateNote').textContent=eurUsd?`${rateLabel}. El total combinado usa una conversión informativa; cada operación conserva su moneda original.`:'No se pudo obtener EUR/USD. Cults y ventas directas permanecen separados hasta recuperar la referencia.';
+    const year=$('#incomeYear').value,month=$('#incomeMonth').value,monthSelect=$('#incomeMonth');monthSelect.disabled=!year;if(!year&&month){monthSelect.value='';}
+    const period=year&&month?`${year}-${month}`:year,previous=previousPeriod(period),cults=sum(periodRows(period)),direct=host.directSummary(period),previousCults=sum(periodRows(previous)),previousDirect=host.directSummary(previous);
+    const cultsUsd=eurUsd?cults.net*eurUsd:0,total=direct.net+cultsUsd,previousTotal=previousDirect.net+(eurUsd?previousCults.net*eurUsd:0),scope=periodLabel(period);
+    $('#incomeMetrics').innerHTML=`<article class="metric-card income-total"><span>Ingresos totales · ${esc(scope)}</span><strong>${eurUsd?money(total,'USD'):'—'}</strong><small>Cults neto + ventas directas netas</small><em class="income-change">${esc(variation(total,previousTotal))}</em></article>
+      <article class="metric-card"><span>Ventas Cults · ${esc(scope)}</span><strong>${money(cults.net,'EUR')}</strong><small>${eurUsd?`≈ ${money(cultsUsd,'USD')} · `:''}${cults.count} ventas</small><em class="income-change">${esc(variation(cults.net,previousCults.net))}</em></article>
+      <article class="metric-card"><span>Ventas por fuera · ${esc(scope)}</span><strong>${money(direct.net,'USD')}</strong><small>${direct.count} recibos válidos · incluye presupuestos entregados</small><em class="income-change">${esc(variation(direct.net,previousDirect.net))}</em></article>`;
+    $('#incomeRateNote').textContent=eurUsd?`${rateLabel}. Comparación contra ${periodLabel(previous)}; cada operación conserva su moneda original.`:'No se pudo obtener EUR/USD. Cults y ventas directas permanecen separados hasta recuperar la referencia.';
+    const historyYear=year||currentYear;
+    $('#incomeMonths').innerHTML=monthNames.map((name,index)=>{const key=`${historyYear}-${String(index+1).padStart(2,'0')}`,prior=previousPeriod(key),cs=sum(periodRows(key)),ds=host.directSummary(key),ps=sum(periodRows(prior)),pds=host.directSummary(prior),cultsValue=eurUsd?cs.net*eurUsd:0,totalValue=ds.net+cultsValue,priorTotal=pds.net+(eurUsd?ps.net*eurUsd:0);return `<tr class="${key===period?'income-month-selected':''}"><td><strong>${name} ${historyYear}</strong></td><td>${money(cs.net,'EUR')}</td><td>${eurUsd?money(cultsValue,'USD'):'—'}</td><td>${money(ds.net,'USD')}</td><td><strong>${eurUsd?money(totalValue,'USD'):'—'}</strong></td><td><span class="income-change compact">${esc(variation(totalValue,priorTotal,true))}</span></td></tr>`;}).join('');
   }
   function render() {
     years();const rows=filtered(),stats=sum(rows);page=Math.min(page,Math.max(0,Math.ceil(rows.length/pageSize)-1));
@@ -90,7 +112,7 @@ window.JG3DCults = { create(host) {
   $('#cultsRefresh').onclick=()=>refresh();$('#cultsSync').onclick=sync;
   ['#cfYear','#cfSearch','#cfPayout','#cfCountry'].forEach(selector=>{$(selector).addEventListener('input',()=>{page=0;render();});$(selector).addEventListener('change',()=>{page=0;render();});});
   $('#cfClear').onclick=()=>{$('#cfYear').value='';$('#cfSearch').value='';$('#cfPayout').value='';$('#cfCountry').value='';page=0;render();};
-  $('#incomeYear').onchange=renderDashboard;
+  $('#incomeYear').onchange=renderDashboard;$('#incomeMonth').onchange=renderDashboard;
   $('#cultsPagination').onclick=event=>{const target=event.target.closest('[data-page]');if(!target)return;if(target.dataset.page==='prev')page=Math.max(0,page-1);else page++;render();view.scrollIntoView({behavior:'smooth',block:'start'});};
   return {async start(account){user=account;await Promise.all([refresh(),loadRate()]);if(!records.length)await sync();},stop(){user=null;records=[];syncState=null;ready=false;render();},refresh,sync,render,renderDashboard};
 } };
