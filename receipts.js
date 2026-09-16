@@ -205,6 +205,7 @@ window.JG3DReceipts = { create(host) {
     $('#receiptGroups').innerHTML=[...groups].sort(([a],[b])=>a.localeCompare(b)).map(([key,rs])=>{const x=C.summarize(rs),label=group==='country'?C.country(key,'es'):group==='client'?rs[0].client.name:group==='method'?methods[key]:key;return `<tr><td>${e(label)}</td><td>${x.count}</td><td>${C.currency(x.gross)}</td><td>${C.currency(x.fee)}</td><td>${C.currency(x.net)}</td></tr>`;}).join('') || '<tr><td colspan="5">Sin pagos para esta selección.</td></tr>';
     $('#receiptRows').innerHTML=rows.map(r=>`<tr><td><strong>${e(r.number)}</strong><small>${e(r.paid_date)} · ${e(methods[r.payment_method])}</small></td><td>${e(r.client.name)}<small>${r.source_quote_id?'Desde presupuesto':'Archivos existentes'}</small></td><td>${C.currency(r.paid_amount,r.currency)}</td><td>${C.currency(r.fee_amount,r.currency)}</td><td>${C.currency(r.paid_amount-r.fee_amount,r.currency)}</td><td><span class="status-badge ${r.status==='void'?'draft':'delivered'}">${({paid:'Pagado',sent:'Enviado',void:'Anulado'})[r.status]}</span>${r.status==='void'?`<small>${e(r.void_reason)}</small>`:''}</td><td><div class="row-actions"><button class="row-button" type="button" data-r-pdf="${r.id}">PDF</button>${r.status!=='void'?`<button class="row-button" type="button" data-r-message="${r.id}">WhatsApp</button>${r.status==='paid'?`<button class="row-button" type="button" data-r-sent="${r.id}">Marcar enviado</button>`:''}<button class="row-button danger" type="button" data-r-void="${r.id}">Anular</button>`:''}</div></td></tr>`).join('');
     $('#receiptEmpty').hidden=rows.length>0;
+    host.incomeChanged?.();
   }
   async function changeStatus(id,status) {
     if(busy || !user)return;const r=records.find(x=>x.id===id);if(!r || r.status==='void')return;
@@ -238,6 +239,7 @@ window.JG3DReceipts = { create(host) {
   $('#receiptCopy').onclick=async()=>{try{await navigator.clipboard.writeText($('#receiptMessageText').value);host.toast('Mensaje copiado. Adjuntá el PDF al enviarlo.');}catch{$('#receiptMessageText').select();host.toast('Seleccioná y copiá el mensaje manualmente.');}};
   $('#receiptMessageClose').onclick=()=>{$('#receiptMessage').hidden=true;messageRecord=null;};
   return { async start(u){user=u;await refresh();},stop(){generation++;user=null;ready=false;records=[];messageRecord=null;$('#receiptEditor').hidden=true;$('#receiptMessage').hidden=true;$('#receiptForm').reset();$('#rItems').replaceChildren();$('#receiptMessageText').value='';render();},refresh,openNew,createFromQuote,
+    summary(year=''){return C.summarize(records.filter(r=>!year||String(r.paid_date||'').slice(0,4)===String(year)));},
     history(id){host.navigate('receipts');selects();$('#rfClear').click();$('#rfClient').value=id;render();},render(){selects();render();},
     document:r=>C.documentHTML(r,host.footer),message:C.message,
     preparePrint(r){

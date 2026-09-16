@@ -1,0 +1,15 @@
+#view-cults [hidden] { display:none !important; }
+.income-overview { margin:16px 0; padding:22px; border-color:rgba(241,37,45,.22); }
+.income-overview .panel-heading { align-items:flex-end; margin-bottom:16px; }
+.income-overview label { width:150px; }
+.income-overview select { margin-top:6px; }
+.income-metrics { display:grid; grid-template-columns:1.25fr 1fr 1fr; gap:12px; }
+.income-total { border-color:rgba(241,37,45,.42); background:radial-gradient(circle at 90% 0,rgba(241,37,45,.2),transparent 11rem),var(--surface-2); }
+.income-total strong { color:#fff; }
+.cults-link { color:var(--text); text-decoration:none; white-space:normal; }
+.cults-link:hover { color:var(--red); }
+#cultsRows td:nth-child(2) { min-width:320px; max-width:520px; white-space:normal; }
+.cults-pagination { display:flex; justify-content:center; align-items:center; gap:14px; padding:14px; color:var(--muted-2); font-size:10px; }
+.cults-pagination .row-button { width:auto; padding:0 12px; }
+@media (max-width:900px) { .income-metrics { grid-template-columns:1fr; } }
+@media (max-width:620px) { .income-overview .panel-heading { align-items:stretch; flex-direction:column; } .income-overview label { width:100%; } }

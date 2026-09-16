@@ -67,6 +67,7 @@
   let quotes = load(STORAGE.quotes, []);
   let currentPreview = null;
   let receiptsApp = null;
+  let cultsApp = null;
   let currentUser = null;
   let cloudSyncTimer = null;
   let suppressCloudSync = false;
@@ -263,6 +264,7 @@
       if (!receiptsApp) receiptsApp = window.JG3DReceipts.create({
         cloud: cloudClient, clients: () => clients, quotes: () => quotes, settings: () => settings,
         navigate, toast, footer: documentFooter, rate: fetchCurrencyRate, closePreview,
+        incomeChanged: () => cultsApp?.renderDashboard(),
         preview: receipt => openPreview({ kind: 'receipt', receipt }),
         async ensureClient(receipt) {
           const selected = clients.find(c => c.id === receipt.client_id);
@@ -284,6 +286,11 @@
           }
         }
       });
+      if (!cultsApp) cultsApp = window.JG3DCults.create({
+        cloud: cloudClient,
+        toast,
+        directSummary: year => receiptsApp?.summary(year) || { count: 0, gross: 0, fee: 0, net: 0 }
+      });
       if (!appStarted) {
         bindEvents();
         appStarted = true;
@@ -299,6 +306,7 @@
       $("#appShell").hidden = false;
       setCloudStatus("Nube segura activa", "online");
       await receiptsApp.start(currentUser);
+      await cultsApp.start(currentUser);
       if (result === "migrated") toast("Datos locales sincronizados con Supabase.");
     } catch (error) {
       console.error("Supabase workspace load failed", error);
@@ -347,6 +355,7 @@
     await cloudClient.auth.signOut();
     currentUser = null;
     receiptsApp?.stop();
+    cultsApp?.stop();
     closePreview();
     currentPreview = null;
     $("#quoteDocument").replaceChildren();
@@ -367,6 +376,7 @@
       clients: ["RELACIONES", "Clientes"],
       history: ["SEGUIMIENTO", "Presupuestos"],
       receipts: ["VENTAS DIRECTAS", "Recibos e ingresos"],
+      cults: ["MARKETPLACE", "Ventas de Cults"],
       settings: ["SISTEMA", "Configuración"]
     };
     $$(".view").forEach(view => view.classList.toggle("active", view.id === `view-${viewName}`));
@@ -378,6 +388,7 @@
     if (viewName === "clients") renderClients();
     if (viewName === "history") renderQuotes();
     if (viewName === "receipts") receiptsApp?.render();
+    if (viewName === "cults") cultsApp?.render();
     if (viewName === "settings") populateSettings();
     if (viewName === "quote") refreshRateIfNeeded();
     window.scrollTo({ top: 0, behavior: "smooth" });
@@ -1094,6 +1105,7 @@
     $("#metricValue").textContent = money(quotes.reduce((total, record) => total + record.data.calculation.grossUsd, 0));
     const recent = quotes.slice(0, 4);
     $("#recentQuotes").innerHTML = recent.length ? recent.map(record => `<div class="recent-item"><div><strong>${escapeHtml(record.data.projectTitle)}</strong><small>${record.number} · ${escapeHtml(record.data.clientName)}</small></div><div class="recent-price"><strong>${money(record.data.calculation.finalConverted, record.data.currency)}</strong><span class="status-badge ${record.status}">${statusLabels[record.status]}</span></div></div>`).join("") : '<div class="empty-state small"><span>◇</span><p>Todavía no hay presupuestos guardados.</p></div>';
+    cultsApp?.renderDashboard();
   }
 
   function populateSettings() {
