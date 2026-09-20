@@ -2,10 +2,11 @@
 window.JG3DCults = { create(host) {
   'use strict';
   const $=s=>document.querySelector(s), esc=v=>String(v??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#039;'}[c]));
-  let user=null,records=[],syncState=null,busy=false,ready=false,page=0,eurUsd=0,rateLabel='Sin referencia EUR/USD';
+  let user=null,records=[],syncState=null,busy=false,ready=false,page=0,eurUsd=0,arsPerUsd=0,rateLabel='Sin referencia EUR/USD',arsRateLabel='Sin referencia USD/ARS';
   const pageSize=50,currentYear=String(new Date().getFullYear()),currentMonth=String(new Date().getMonth()+1).padStart(2,'0');
   const monthNames=['Enero','Febrero','Marzo','Abril','Mayo','Junio','Julio','Agosto','Septiembre','Octubre','Noviembre','Diciembre'];
   const money=(value,code='EUR')=>`${code} ${Number(value||0).toLocaleString('es-AR',{minimumFractionDigits:2,maximumFractionDigits:2})}`;
+  const arsMoney=value=>`ARS ${Number(value||0).toLocaleString('es-AR',{minimumFractionDigits:0,maximumFractionDigits:0})}`;
   const sum=rows=>rows.reduce((s,r)=>{s.count++;s.gross+=Number(r.gross_excluding_tax||0);s.fee+=Number(r.commission||0);s.net+=Number(r.net_income||0);if(r.paid_out_at)s.paid+=Number(r.net_income||0);else s.pending+=Number(r.net_income||0);return s;},{count:0,gross:0,fee:0,net:0,paid:0,pending:0});
   const saleYear=r=>String(r.sold_at||'').slice(0,4);
   const rateKey='jg3d_cults_eur_usd_v1';
@@ -66,10 +67,11 @@ window.JG3DCults = { create(host) {
     const year=$('#incomeYear').value,month=$('#incomeMonth').value,monthSelect=$('#incomeMonth');monthSelect.disabled=!year;if(!year&&month){monthSelect.value='';}
     const period=year&&month?`${year}-${month}`:year,previous=previousPeriod(period),cults=sum(periodRows(period)),direct=host.directSummary(period),previousCults=sum(periodRows(previous)),previousDirect=host.directSummary(previous);
     const cultsUsd=eurUsd?cults.net*eurUsd:0,total=direct.net+cultsUsd,previousTotal=previousDirect.net+(eurUsd?previousCults.net*eurUsd:0),scope=periodLabel(period);
-    $('#incomeMetrics').innerHTML=`<article class="metric-card income-total"><span>Ingresos totales · ${esc(scope)}</span><strong>${eurUsd?money(total,'USD'):'—'}</strong><small>Cults neto + ventas directas netas</small><em class="income-change">${esc(variation(total,previousTotal))}</em></article>
-      <article class="metric-card"><span>Ventas Cults · ${esc(scope)}</span><strong>${money(cults.net,'EUR')}</strong><small>${eurUsd?`≈ ${money(cultsUsd,'USD')} · `:''}${cults.count} ventas</small><em class="income-change">${esc(variation(cults.net,previousCults.net))}</em></article>
-      <article class="metric-card"><span>Ventas por fuera · ${esc(scope)}</span><strong>${money(direct.net,'USD')}</strong><small>${direct.count} recibos válidos · incluye presupuestos entregados</small><em class="income-change">${esc(variation(direct.net,previousDirect.net))}</em></article>`;
-    $('#incomeRateNote').textContent=eurUsd?`${rateLabel}. Comparación contra ${periodLabel(previous)}; cada operación conserva su moneda original.`:'No se pudo obtener EUR/USD. Cults y ventas directas permanecen separados hasta recuperar la referencia.';
+    const arsEquivalent=value=>arsPerUsd?`<b class="income-ars">≈ ${esc(arsMoney(value*arsPerUsd))}</b>`:'';
+    $('#incomeMetrics').innerHTML=`<article class="metric-card income-total"><span>Ingresos totales · ${esc(scope)}</span><strong>${eurUsd?money(total,'USD'):'—'}</strong>${eurUsd?arsEquivalent(total):''}<small>Cults neto + ventas directas netas</small><em class="income-change">${esc(variation(total,previousTotal))}</em></article>
+      <article class="metric-card"><span>Ventas Cults · ${esc(scope)}</span><strong>${money(cults.net,'EUR')}</strong><small>${eurUsd?`≈ ${money(cultsUsd,'USD')} · `:''}${cults.count} ventas</small>${eurUsd?arsEquivalent(cultsUsd):''}<em class="income-change">${esc(variation(cults.net,previousCults.net))}</em></article>
+      <article class="metric-card"><span>Ventas por fuera · ${esc(scope)}</span><strong>${money(direct.net,'USD')}</strong>${arsEquivalent(direct.net)}<small>${direct.count} recibos válidos · incluye presupuestos entregados</small><em class="income-change">${esc(variation(direct.net,previousDirect.net))}</em></article>`;
+    $('#incomeRateNote').textContent=eurUsd?`${rateLabel}. ${arsPerUsd?`${arsRateLabel}. `:''}Comparación contra ${periodLabel(previous)}; cada operación conserva su moneda original.`:'No se pudo obtener EUR/USD. Cults y ventas directas permanecen separados hasta recuperar la referencia.';
     const historyYear=year||currentYear;
     $('#incomeMonths').innerHTML=monthNames.map((name,index)=>{const key=`${historyYear}-${String(index+1).padStart(2,'0')}`,prior=previousPeriod(key),cs=sum(periodRows(key)),ds=host.directSummary(key),ps=sum(periodRows(prior)),pds=host.directSummary(prior),cultsValue=eurUsd?cs.net*eurUsd:0,totalValue=ds.net+cultsValue,priorTotal=pds.net+(eurUsd?ps.net*eurUsd:0);return `<tr class="${key===period?'income-month-selected':''}"><td><strong>${name} ${historyYear}</strong></td><td>${money(cs.net,'EUR')}</td><td>${eurUsd?money(cultsValue,'USD'):'—'}</td><td>${money(ds.net,'USD')}</td><td><strong>${eurUsd?money(totalValue,'USD'):'—'}</strong></td><td><span class="income-change compact">${esc(variation(totalValue,priorTotal,true))}</span></td></tr>`;}).join('');
   }
@@ -94,6 +96,18 @@ window.JG3DCults = { create(host) {
       const value={rate,source:'ExchangeRate-API',updatedAt:new Date().toISOString()};localStorage.setItem(rateKey,JSON.stringify(value));eurUsd=rate;rateLabel=`Referencia EUR/USD ${rate.toFixed(4)} · ExchangeRate-API`;render();
     } catch { render(); }
   }
+  async function loadArsRate(force=false) {
+    try {
+      const reference=await host.rate('ARS',force),rate=Number(reference?.rate);
+      if(!(rate>0))throw Error('rate');
+      arsPerUsd=rate;
+      arsRateLabel=`${reference.source} · 1 USD = ${arsMoney(rate)}`;
+    } catch {
+      arsPerUsd=0;
+      arsRateLabel='Sin referencia USD/ARS';
+    }
+    renderDashboard();
+  }
   async function refresh() {
     if(!user)return;ready=false;$('#cultsStatus').textContent='Cargando ventas privadas…';
     try {
@@ -114,5 +128,5 @@ window.JG3DCults = { create(host) {
   $('#cfClear').onclick=()=>{$('#cfYear').value='';$('#cfSearch').value='';$('#cfPayout').value='';$('#cfCountry').value='';page=0;render();};
   $('#incomeYear').onchange=renderDashboard;$('#incomeMonth').onchange=renderDashboard;
   $('#cultsPagination').onclick=event=>{const target=event.target.closest('[data-page]');if(!target)return;if(target.dataset.page==='prev')page=Math.max(0,page-1);else page++;render();view.scrollIntoView({behavior:'smooth',block:'start'});};
-  return {async start(account){user=account;await Promise.all([refresh(),loadRate()]);if(!records.length)await sync();},stop(){user=null;records=[];syncState=null;ready=false;render();},refresh,sync,render,renderDashboard};
+  return {async start(account){user=account;await Promise.all([refresh(),loadRate(),loadArsRate()]);if(!records.length)await sync();},stop(){user=null;records=[];syncState=null;ready=false;render();},refresh,sync,render,renderDashboard};
 } };

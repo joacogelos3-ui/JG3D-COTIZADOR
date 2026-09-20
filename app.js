@@ -289,6 +289,7 @@
       if (!cultsApp) cultsApp = window.JG3DCults.create({
         cloud: cloudClient,
         toast,
+        rate: fetchCurrencyRate,
         directSummary: year => receiptsApp?.summary(year) || { count: 0, gross: 0, fee: 0, net: 0 }
       });
       if (!appStarted) {
