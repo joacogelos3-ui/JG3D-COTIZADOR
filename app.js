@@ -66,6 +66,8 @@
   let clients = load(STORAGE.clients, []);
   let quotes = load(STORAGE.quotes, []);
   let currentPreview = null;
+  let savingQuote = false;
+  let previewGeneration = 0;
   let receiptsApp = null;
   let cultsApp = null;
   let currentUser = null;
@@ -575,7 +577,8 @@
     const paymentText = data.calculation.installments === 2
       ? `50% (${paypalPayment ? moneyWithCode(payableTotal / 2, "USD") : money(payableTotal / 2, payableCurrency)}) + 50% (${paypalPayment ? moneyWithCode(payableTotal / 2, "USD") : money(payableTotal / 2, payableCurrency)})`
       : `100% ${payableText}`;
-    const brlReference = brazilPaypal ? money(data.calculation.finalConverted, "BRL") : "";
+    const brlAmount = quoteBrlAmount(data);
+    const brlReference = brlAmount !== null ? money(brlAmount, "BRL") : "";
     const scope = data.scope || (documentLanguage === "pt" ? "Modelagem 3D conforme as referências e medidas fornecidas pelo cliente." : documentLanguage === "en" ? "3D modeling according to the references and measurements supplied by the client." : "Modelado 3D según las referencias y medidas suministradas por el cliente.");
     const defaultCondition = documentLanguage === "pt" ? "Alterações fora do escopo e revisões adicionais serão orçadas separadamente." : documentLanguage === "en" ? "Changes outside the agreed scope and additional revisions will be quoted separately." : "Los cambios fuera del alcance y las revisiones adicionales se cotizarán por separado.";
     const countryText = translatedDocumentValue(documentCountries, data.country, documentLanguage);
@@ -605,14 +608,21 @@
       <section class="doc-section"><h3>${labels.scope}</h3><p>${escapeHtml(scope).replace(/\n/g, "<br>")}</p></section>
       <section class="doc-section"><h3>${labels.deliverables}</h3><ul>${deliverables.map(item => `<li>${escapeHtml(item)}</li>`).join("")}</ul></section>
       <section class="doc-section"><h3>${labels.conditions}</h3><ul><li>${data.revisions} ${labels.revisions}.</li><li>${escapeHtml(data.notes || defaultCondition)}</li><li>${documentLanguage === "pt" ? "A entrega dos arquivos finais é realizada após a confirmação do pagamento." : documentLanguage === "en" ? "Final files are delivered after payment confirmation." : "Los archivos finales se entregan después de confirmar el pago."}</li></ul></section>
-      <div class="doc-total"><div><span>${paypalPayment ? labels.paypalTotal : labels.total}</span><strong>${payableText}</strong>${brazilPaypal ? `<small class="doc-price-reference">${labels.reference}: ${brlReference}</small>` : ""}</div><div class="doc-payment"><span>${labels.payment}</span><p>${paymentText}<br>${escapeHtml(paymentMethodText)}</p></div></div>
+      <div class="doc-total"><div><span>${paypalPayment ? labels.paypalTotal : labels.total}</span><strong>${payableText}</strong>${brazilPaypal && brlReference ? `<small class="doc-price-reference">${labels.reference}: ${brlReference}</small>` : ""}</div><div class="doc-payment"><span>${labels.payment}</span><p>${paymentText}<br>${escapeHtml(paymentMethodText)}</p></div></div>
       ${documentFooter(labels)}`;
   }
 
-  function openPreview(record = null) {
+  async function openPreview(record = null) {
     if (!record && !quoteRateReady()) return;
+    const generation = ++previewGeneration;
+    const preview = record ? structuredClone(record) : { number: quoteNumber(), createdAt: new Date().toISOString(), data: getQuoteData() };
+    if (preview.kind !== 'receipt') {
+      try { await ensureQuoteBrlReference(preview.data); }
+      catch { toast("No se pudo consultar USD/BRL. Se muestra solo el total en USD, sin una equivalencia en reales sin verificar."); }
+    }
+    if (generation !== previewGeneration) return;
     $("#quotePrintSheet")?.remove();
-    currentPreview = record || { number: quoteNumber(), createdAt: new Date().toISOString(), data: getQuoteData() };
+    currentPreview = preview;
     $("#quoteDocument").innerHTML = buildDocument(currentPreview);
     $("#quoteDocument").classList.toggle('receipt-document', currentPreview.kind === 'receipt');
     $("#previewTitle").textContent = currentPreview.kind === 'receipt' ? 'Vista previa del recibo' : 'Vista previa del presupuesto';
@@ -622,6 +632,7 @@
   }
 
   function closePreview() {
+    previewGeneration += 1;
     $("#quotePrintSheet")?.remove();
     $("#previewModal").classList.remove("open");
     $("#previewModal").setAttribute("aria-hidden", "true");
@@ -695,8 +706,9 @@
     const totalLabel = paypalPayment
       ? (data.language === "pt" ? "Total a pagar via PayPal" : data.language === "en" ? "Total payable via PayPal" : "Total a pagar por PayPal")
       : "Total";
-    const referenceLine = brazilPaypal
-      ? `\n${data.language === "pt" ? "Referência aproximada em reais" : data.language === "en" ? "Approximate reference in Brazilian reais" : "Referencia aproximada en reales"}: ${money(data.calculation.finalConverted, "BRL")}`
+    const brlAmount = quoteBrlAmount(data);
+    const referenceLine = brazilPaypal && brlAmount !== null
+      ? `\n${data.language === "pt" ? "Referência aproximada em reais" : data.language === "en" ? "Approximate reference in Brazilian reais" : "Referencia aproximada en reales"}: ${money(brlAmount, "BRL")}`
       : "";
     const messages = {
       es: `Hola ${data.clientName}, te envío el presupuesto ${number} correspondiente a “${data.projectTitle}”.\n\n${totalLabel}: ${total}${referenceLine}\nValidez: ${data.validDays} días.\n\nAdjunto el PDF con el alcance, los entregables y la forma de pago. Quedo atento a tu confirmación.`,
@@ -716,8 +728,9 @@
     }
   }
 
-  function saveQuote(event) {
+  async function saveQuote(event) {
     event.preventDefault();
+    if (savingQuote) return;
     if (!quoteRateReady()) return;
     if (!$("#projectTitle").value.trim()) {
       $("#projectTitle").focus();
@@ -735,25 +748,56 @@
       return;
     }
     const data = getQuoteData();
-    if (!linkQuoteClient(data)) return;
-    const record = {
-      id: uid("quote"),
-      number: quoteNumber(),
-      createdAt: new Date().toISOString(),
-      status: "draft",
-      data
-    };
-    quotes.unshift(record);
-    settings.nextNumber += 1;
-    persist();
-    populateClientSelect();
-    $("#quoteClient").value = data.clientId;
-    $("#clientType").value = "existing";
-    renderClients();
-    renderDashboard();
-    renderQuotes();
-    openPreview(record);
-    toast(`Presupuesto ${record.number} guardado como borrador.`);
+    savingQuote = true;
+    $("#saveQuote").disabled = true;
+    try {
+      try { await ensureQuoteBrlReference(data); }
+      catch (error) {
+        toast(`No se pudo guardar la referencia USD/BRL. ${error.message} Reintentá o seleccioná BRL con un tipo de cambio manual.`);
+        return;
+      }
+      if (!linkQuoteClient(data)) return;
+      const record = {
+        id: uid("quote"),
+        number: quoteNumber(),
+        createdAt: new Date().toISOString(),
+        status: "draft",
+        data
+      };
+      quotes.unshift(record);
+      settings.nextNumber += 1;
+      persist();
+      populateClientSelect();
+      $("#quoteClient").value = data.clientId;
+      $("#clientType").value = "existing";
+      renderClients();
+      renderDashboard();
+      renderQuotes();
+      openPreview(record);
+      toast(`Presupuesto ${record.number} guardado como borrador.`);
+    } finally {
+      savingQuote = false;
+      $("#saveQuote").disabled = rateState.mode === "automatic" && rateState.status !== "ready";
+    }
+  }
+
+  function quoteBrlAmount(data) {
+    if (data.country !== "BR" || data.paymentMethod !== "paypal") return null;
+    // finalConverted belongs to data.currency: it must never be relabelled BRL.
+    const rate = data.brlReference?.currency === "BRL"
+      ? Number(data.brlReference.rate)
+      : data.currency === "BRL" ? Number(data.exchangeRate) : NaN;
+    const gross = Number(data.calculation?.grossUsd);
+    return Number.isFinite(rate) && rate >= .0001 && Number.isFinite(gross) && gross >= 0
+      ? gross * rate : null;
+  }
+
+  async function ensureQuoteBrlReference(data) {
+    if (data.country !== "BR" || data.paymentMethod !== "paypal") return;
+    // Preserve the quote's saved reference, including a manually chosen BRL rate.
+    if (quoteBrlAmount(data) !== null) return;
+    const reference = await fetchCurrencyRate("BRL");
+    data.brlReference = { ...reference, mode: "automatic" };
   }
 
   function resetQuoteForm() {
@@ -795,7 +839,7 @@
     $("#currencySuffix").textContent = $("#currency").value;
     $("#refreshExchangeRate").disabled = rateState.status === "pending";
     const blocked = rateState.mode === "automatic" && rateState.status !== "ready";
-    $("#saveQuote").disabled = blocked;
+    $("#saveQuote").disabled = blocked || savingQuote;
     $("#printPreview").disabled = blocked;
   }
 
