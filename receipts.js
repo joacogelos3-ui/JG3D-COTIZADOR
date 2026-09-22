@@ -46,7 +46,7 @@ window.JG3DReceipts = { create(host) {
       <label>Medio de pago<select id="rfMethod"><option value="">Todos</option>${options(methods)}</select></label>
       <label>Moneda cobrada<select id="rfCurrency"><option value="">Todas</option>${options({USD:'USD',BRL:'BRL',ARS:'ARS'})}</select></label>
       <label>Estado<select id="rfState">${options({'':'Todos',paid:'Pagado',sent:'Enviado',void:'Anulado'})}</select></label>
-      <label>Origen<select id="rfOrigin">${options({'':'Todos',direct:'Archivos existentes',quote:'Desde presupuesto'})}</select></label>
+      <label>Origen<select id="rfOrigin">${options({'':'Todos',direct:'Archivos existentes',quote:'Desde presupuesto',order:'Pedido de archivos'})}</select></label>
       <label>Agrupar resumen<select id="rfGroup">${options({year:'Año del pago',month:'Mes del pago',country:'País',client:'Cliente',method:'Medio de pago',currency:'Moneda'},'year')}</select></label>
     </div><button type="button" id="rfClear" class="row-button">Limpiar filtros</button></div>
     <div class="metrics-grid" id="receiptMetrics"></div>
@@ -184,18 +184,18 @@ window.JG3DReceipts = { create(host) {
     }catch(error){$('#rError').textContent=error.code==='23505'?'Ya existe un recibo para esa operación. Revisá el historial antes de volver a guardarlo.':`No se guardó el recibo: ${error.message || 'revisá tu conexión e intentá nuevamente.'}`;}
     finally{busy=false;$('#rSave').disabled=!ready;}
   }
-  async function refresh() {
+  async function refresh(strict=false) {
     if(!user)return; const epoch=++generation,opUser=user.id;ready=false;$('#receiptNew').disabled=true;$('#rSave').disabled=true;$('#receiptStatus').textContent='Cargando recibos privados…';
     try {
       const all=[];
       for(let offset=0;;offset+=1000){const {data,error}=await host.cloud.from('receipts').select('*').eq('user_id',opUser).order('issued_at',{ascending:false}).order('id').range(offset,offset+999);if(error)throw error;all.push(...data);if(data.length<1000)break;}
       if(epoch!==generation || user?.id!==opUser)return;
       records=all;ready=true;$('#receiptStatus').textContent='Conectado · los recibos se guardan en tu cuenta privada.';selects();render();
-    }catch(error){if(epoch!==generation)return;records=[];render();$('#receiptStatus').textContent='No se pudieron cargar los recibos. Revisá tu conexión y presioná Actualizar. Los presupuestos siguen disponibles.';}
+    }catch(error){if(epoch!==generation)return;records=[];render();$('#receiptStatus').textContent='No se pudieron cargar los recibos. Revisá tu conexión y presioná Actualizar. Los presupuestos siguen disponibles.';if(strict)throw Error('No se pudieron verificar los pagos. Actualizá los recibos antes de continuar.');}
     finally{if(epoch===generation){$('#receiptNew').disabled=!ready;$('#rSave').disabled=!ready;}}
   }
   function filtered() {
-    const q=$('#rfSearch').value.trim().toLowerCase(),year=$('#rfYear').value;return records.filter(r=>(!year || String(r.paid_date||'').slice(0,4)===year) && (!$('#rfClient').value || r.client_id===$('#rfClient').value) && (!$('#rfMethod').value || r.payment_method===$('#rfMethod').value) && (!$('#rfCurrency').value || r.currency===$('#rfCurrency').value) && (!$('#rfState').value || r.status===$('#rfState').value) && (!$('#rfOrigin').value || (r.source_quote_id?'quote':'direct')===$('#rfOrigin').value) && [r.number,r.client.name,...r.items.map(i=>i.name)].join(' ').toLowerCase().includes(q));
+    const q=$('#rfSearch').value.trim().toLowerCase(),year=$('#rfYear').value;return records.filter(r=>(!year || String(r.paid_date||'').slice(0,4)===year) && (!$('#rfClient').value || r.client_id===$('#rfClient').value) && (!$('#rfMethod').value || r.payment_method===$('#rfMethod').value) && (!$('#rfCurrency').value || r.currency===$('#rfCurrency').value) && (!$('#rfState').value || r.status===$('#rfState').value) && (!$('#rfOrigin').value || (r.exchange_info?.fileOrder?'order':r.source_quote_id?'quote':'direct')===$('#rfOrigin').value) && [r.number,r.client.name,...r.items.map(i=>i.name),...(r.exchange_info?.fileOrder?.items || []).map(i=>i.name)].join(' ').toLowerCase().includes(q));
   }
   function render() {
     const rows=filtered(),s=C.summarize(rows);
@@ -203,7 +203,7 @@ window.JG3DReceipts = { create(host) {
     const group=$('#rfGroup').value,groups=new Map();
     rows.filter(r=>r.status!=='void').forEach(r=>{const key=({year:r.paid_date.slice(0,4),month:r.paid_date.slice(0,7),country:r.client.country,client:r.client_id,method:r.payment_method,currency:r.currency})[group];if(!groups.has(key))groups.set(key,[]);groups.get(key).push(r);});
     $('#receiptGroups').innerHTML=[...groups].sort(([a],[b])=>a.localeCompare(b)).map(([key,rs])=>{const x=C.summarize(rs),label=group==='country'?C.country(key,'es'):group==='client'?rs[0].client.name:group==='method'?methods[key]:key;return `<tr><td>${e(label)}</td><td>${x.count}</td><td>${C.currency(x.gross)}</td><td>${C.currency(x.fee)}</td><td>${C.currency(x.net)}</td></tr>`;}).join('') || '<tr><td colspan="5">Sin pagos para esta selección.</td></tr>';
-    $('#receiptRows').innerHTML=rows.map(r=>`<tr><td><strong>${e(r.number)}</strong><small>${e(r.paid_date)} · ${e(methods[r.payment_method])}</small></td><td>${e(r.client.name)}<small>${r.source_quote_id?'Desde presupuesto':'Archivos existentes'}</small></td><td>${C.currency(r.paid_amount,r.currency)}</td><td>${C.currency(r.fee_amount,r.currency)}</td><td>${C.currency(r.paid_amount-r.fee_amount,r.currency)}</td><td><span class="status-badge ${r.status==='void'?'draft':'delivered'}">${({paid:'Pagado',sent:'Enviado',void:'Anulado'})[r.status]}</span>${r.status==='void'?`<small>${e(r.void_reason)}</small>`:''}</td><td><div class="row-actions"><button class="row-button" type="button" data-r-pdf="${r.id}">PDF</button>${r.status!=='void'?`<button class="row-button" type="button" data-r-message="${r.id}">WhatsApp</button>${r.status==='paid'?`<button class="row-button" type="button" data-r-sent="${r.id}">Marcar enviado</button>`:''}<button class="row-button danger" type="button" data-r-void="${r.id}">Anular</button>`:''}</div></td></tr>`).join('');
+    $('#receiptRows').innerHTML=rows.map(r=>`<tr><td><strong>${e(r.number)}</strong><small>${e(r.paid_date)} · ${e(methods[r.payment_method])}</small></td><td>${e(r.client.name)}<small>${r.exchange_info?.fileOrder?'Pedido de archivos':r.source_quote_id?'Desde presupuesto':'Archivos existentes'}</small></td><td>${C.currency(r.paid_amount,r.currency)}</td><td>${C.currency(r.fee_amount,r.currency)}</td><td>${C.currency(r.paid_amount-r.fee_amount,r.currency)}</td><td><span class="status-badge ${r.status==='void'?'draft':'delivered'}">${({paid:'Pagado',sent:'Enviado',void:'Anulado'})[r.status]}</span>${r.status==='void'?`<small>${e(r.void_reason)}</small>`:''}</td><td><div class="row-actions"><button class="row-button" type="button" data-r-pdf="${r.id}">PDF</button>${r.status!=='void'?`<button class="row-button" type="button" data-r-message="${r.id}">WhatsApp</button>${r.status==='paid'?`<button class="row-button" type="button" data-r-sent="${r.id}">Marcar enviado</button>`:''}<button class="row-button danger" type="button" data-r-void="${r.id}">Anular</button>`:''}</div></td></tr>`).join('');
     $('#receiptEmpty').hidden=rows.length>0;
     host.incomeChanged?.();
   }
@@ -214,6 +214,14 @@ window.JG3DReceipts = { create(host) {
     try{const {data,error}=await host.cloud.from('receipts').update({status,...(reason?{void_reason:reason.trim()}: {})}).eq('user_id',user.id).eq('id',id).select().single();if(error)throw error;if(epoch!==generation)return;records=records.map(x=>x.id===id?data:x);render();host.closePreview();$('#receiptMessage').hidden=true;host.toast(status==='void'?'Recibo anulado.':'Recibo marcado como enviado.');}catch(error){host.toast('No se pudo cambiar el estado. Actualizá el listado e intentá nuevamente.');}finally{busy=false;}
   }
   function showMessage(r) {if(r.status==='void')return;messageRecord=r;$('#receiptMessageText').value=C.message(r);$('#receiptMessage').hidden=false;$('#receiptMessage').scrollIntoView({behavior:'smooth'});}
+  async function saveOrderPayment(receipt) {
+    if(!user || !ready || busy) throw Error('Esperá a que terminen de cargar los recibos.');
+    const owner=user.id,epoch=generation;busy=true;
+    try {
+      const saved=await window.JG3DOrderPayments.save(host.cloud,owner,receipt,()=>user?.id===owner && epoch===generation);
+      records=[saved,...records.filter(r=>r.id!==saved.id)];selects();render();return saved;
+    } finally {busy=false;}
+  }
   async function fetchRate() {
     const code=$('#rCurrency').value;if(code==='USD')return;
     if($('#rDate').value!==today())return host.toast('Para un pago anterior, ingresá el cambio real de esa fecha.');
@@ -238,11 +246,12 @@ window.JG3DReceipts = { create(host) {
   view.addEventListener('click',ev=>{const b=ev.target.closest('button');if(!b)return;const d=b.dataset,id=d.rPdf || d.rMessage || d.rSent || d.rVoid;if(!id)return;const r=records.find(x=>x.id===id);if(!r)return;if(d.rPdf)host.preview(r);if(d.rMessage)showMessage(r);if(d.rSent)changeStatus(id,'sent');if(d.rVoid)changeStatus(id,'void');});
   $('#receiptCopy').onclick=async()=>{try{await navigator.clipboard.writeText($('#receiptMessageText').value);host.toast('Mensaje copiado. Adjuntá el PDF al enviarlo.');}catch{$('#receiptMessageText').select();host.toast('Seleccioná y copiá el mensaje manualmente.');}};
   $('#receiptMessageClose').onclick=()=>{$('#receiptMessage').hidden=true;messageRecord=null;};
-  return { async start(u){user=u;await refresh();},stop(){generation++;user=null;ready=false;records=[];messageRecord=null;$('#receiptEditor').hidden=true;$('#receiptMessage').hidden=true;$('#receiptForm').reset();$('#rItems').replaceChildren();$('#receiptMessageText').value='';render();},refresh,openNew,createFromQuote,
+  return { async start(u){user=u;await refresh();},stop(){generation++;user=null;ready=false;records=[];messageRecord=null;$('#receiptEditor').hidden=true;$('#receiptMessage').hidden=true;$('#receiptForm').reset();$('#rItems').replaceChildren();$('#receiptMessageText').value='';render();},refresh,openNew,createFromQuote,saveOrderPayment,refreshStrict:()=>refresh(true),records:()=>structuredClone(records),
     summary(period=''){const value=String(period||'');return C.summarize(records.filter(r=>!value||String(r.paid_date||'').slice(0,value.length)===value));},
     history(id){host.navigate('receipts');selects();$('#rfClear').click();$('#rfClient').value=id;render();},render(){selects();render();},
-    document:r=>C.documentHTML(r,host.footer),message:C.message,
+    document:r=>r.exchange_info?.fileOrder ? window.JG3DOrderCore.documentHTML(r.exchange_info.fileOrder,host.footer,r.exchange_info.fileOrder.items,1,1,r) : C.documentHTML(r,host.footer),message:C.message,
     preparePrint(r){
+      if(r.exchange_info?.fileOrder)return window.JG3DOrderCore.preparePrint(r.exchange_info.fileOrder,host.footer,r);
       if ($('#quotePrintSheet')) return $('#quotePrintSheet');
       const sheet=document.createElement('div');sheet.id='quotePrintSheet';sheet.className='receipt-print-root';document.body.appendChild(sheet);
       // Split long receipts across A4 sheets instead of shrinking every item to illegibility.
