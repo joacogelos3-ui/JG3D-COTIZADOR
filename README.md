@@ -32,7 +32,36 @@ La aplicación usa Supabase Auth para el acceso privado y una fila protegida por
 ## Próxima etapa
 
 - Integración de OpenAI mediante una función segura.
-- Conversión automática de monedas.
+- La conversión automática de monedas ya está implementada, con ajuste manual.
+
+## Pedidos de archivos STL
+
+La sección **Pedidos de archivos** prepara presupuestos para archivos existentes, separados de los trabajos de modelado:
+
+- Buscar productos por nombre, ECU o vehículo en el catálogo público JG3D, o agregarlos manualmente. Se puede editar el precio USD de cada archivo para ese pedido. Cada fila es un archivo o pack; máximo 30 filas.
+- Se consulta `jg3dworks/main/catalog/data.js` como JSON, sin ejecutar el contenido remoto. Si no se puede actualizar, se muestra la fecha de la copia incluida en `orders-catalog.json`. Los precios son referencias del catálogo: no una consulta en tiempo real a Cults.
+- Activar marca del cliente agrega 20% a todos los archivos. Después se resta el descuento fijo en USD. El total debe ser positivo.
+- Para PayPal se calcula el bruto necesario para cubrir el neto acordado usando la comisión configurada y redondeo hacia arriba al centavo. La comisión vigente en la aplicación se conserva en cada pedido.
+- Elegir uso personal o venta de piezas impresas. PDF y texto WhatsApp ES/EN/PT incluyen archivo/precio, personalización, descuento, total y condición de 100% anticipado. El código de impresión pagina los pedidos extensos.
+- **Revisar cobro** abre fecha, medio, moneda, tipo de cambio, bruto y comisión editables. Una casilla confirma la revisión; cerrar no guarda ni suma ingresos. El importe debe coincidir con el total completo. Para cobros en otra moneda se usa el cambio acordado, sin inferirlo automáticamente de un pago parcial.
+- El estado pagado se deriva del recibo válido. **Marcar entregado** solo se habilita tras el cobro y no crea otro ingreso. Si se anula el recibo, vuelve a quedar pendiente; el reemplazo requiere una nueva confirmación.
+
+### Persistencia y compatibilidad
+
+No requiere migraciones. Los pedidos se guardan con `kind: "file_order"` dentro del JSON `workspaces.quotes`; la aplicación los separa de los presupuestos de modelado al cargar y los combina al guardar. Conserva las políticas existentes por usuario. Evitar usar una pestaña con una versión anterior de la app mientras se editan pedidos: esa versión no conoce el nuevo tipo.
+
+El recibo usa `source_quote_id` para vincular el pedido y guarda su copia inmutable desglosada en `exchange_info.fileOrder`. Un concepto agregado concilia el bruto con el esquema de recibos existente, que no admite conceptos negativos; el PDF muestra el desglose original. El balance sigue tomando únicamente recibos válidos y no agrega otra fuente de ingresos.
+
+`orders-payment.js` usa un UUID determinista por propietario, pedido e historial de anulaciones. Reintentos, respuestas perdidas e intentos simultáneos no emiten dos recibos para el mismo cobro, incluso si cambia el medio de pago.
+
+### Verificación del módulo de pedidos
+
+Ejecutar con Node: `node --test tests/orders.test.cjs tests/orders-payment.test.cjs`.
+Las 12 pruebas cubren cálculo, redondeo, idiomas, escape de texto, pagos parciales, reintentos, concurrencia, anulación y cambios de sesión.
+
+Se comprobó el formato de inserción contra Supabase usando el rol autenticado dentro de una transacción revertida. Se confirmó después que no quedó el registro de prueba.
+
+`tests/orders-browser.cjs` contiene el recorrido con transporte Supabase simulado para ejecutar con Playwright y Chromium instalados, sirviendo esta carpeta en `http://127.0.0.1:8765`. No accede a producción. La revisión visual y esa prueba de navegador quedaron pendientes en este entorno: no había Chromium instalado y el navegador remoto bloqueó la apertura de archivos locales. Revisar móvil y PDF antes de publicar.
 
 ## Publicación
 

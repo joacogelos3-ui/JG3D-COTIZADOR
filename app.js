@@ -64,12 +64,15 @@
 
   let settings = load(STORAGE.settings, defaults);
   let clients = load(STORAGE.clients, []);
-  let quotes = load(STORAGE.quotes, []);
+  const storedQuotes = load(STORAGE.quotes, []);
+  let quotes = storedQuotes.filter(record => record.kind !== 'file_order');
+  let fileOrders = storedQuotes.filter(record => record.kind === 'file_order');
   let currentPreview = null;
   let savingQuote = false;
   let previewGeneration = 0;
   let receiptsApp = null;
   let cultsApp = null;
+  let ordersApp = null;
   let currentUser = null;
   let cloudSyncTimer = null;
   let suppressCloudSync = false;
@@ -106,7 +109,7 @@
 
   function persist() {
     localStorage.setItem(STORAGE.clients, JSON.stringify(clients));
-    localStorage.setItem(STORAGE.quotes, JSON.stringify(quotes));
+    localStorage.setItem(STORAGE.quotes, JSON.stringify([...quotes, ...fileOrders]));
     localStorage.setItem(STORAGE.settings, JSON.stringify(settings));
     if (!suppressCloudSync) scheduleCloudSave();
   }
@@ -115,7 +118,7 @@
     return {
       user_id: currentUser.id,
       clients,
-      quotes,
+      quotes: [...quotes, ...fileOrders],
       settings,
       updated_at: new Date().toISOString()
     };
@@ -154,7 +157,8 @@
     if (data) {
       suppressCloudSync = true;
       clients = Array.isArray(data.clients) ? data.clients : [];
-      quotes = Array.isArray(data.quotes) ? data.quotes : [];
+      quotes = Array.isArray(data.quotes) ? data.quotes.filter(record => record.kind !== 'file_order') : [];
+      fileOrders = Array.isArray(data.quotes) ? data.quotes.filter(record => record.kind === 'file_order') : [];
       settings = {
         ...structuredClone(defaults),
         ...(data.settings || {}),
@@ -266,7 +270,7 @@
       if (!receiptsApp) receiptsApp = window.JG3DReceipts.create({
         cloud: cloudClient, clients: () => clients, quotes: () => quotes, settings: () => settings,
         navigate, toast, footer: documentFooter, rate: fetchCurrencyRate, closePreview,
-        incomeChanged: () => cultsApp?.renderDashboard(),
+        incomeChanged: () => { cultsApp?.renderDashboard(); ordersApp?.render(); },
         preview: receipt => openPreview({ kind: 'receipt', receipt }),
         async ensureClient(receipt) {
           const selected = clients.find(c => c.id === receipt.client_id);
@@ -294,6 +298,35 @@
         rate: fetchCurrencyRate,
         directSummary: year => receiptsApp?.summary(year) || { count: 0, gross: 0, fee: 0, net: 0 }
       });
+      if (!ordersApp) ordersApp = window.JG3DOrders.create({
+        clients: () => clients, orders: () => fileOrders, settings: () => settings,
+        receipts: () => receiptsApp.records(), refreshReceipts: () => receiptsApp.refreshStrict(),
+        savePayment: receipt => receiptsApp.saveOrderPayment(receipt),
+        navigate, toast, footer: documentFooter, rate: fetchCurrencyRate, preview: openPreview,
+        async saveOrder(order, deliveryOnly = false) {
+          if (!currentUser) throw Error('Ingresá nuevamente para guardar el pedido.');
+          const previous = structuredClone(fileOrders), previousClients = structuredClone(clients);
+          const existing = fileOrders.find(o => o.id === order.id);
+          if (deliveryOnly && !existing) throw Error('No se encontró el pedido.');
+          if (!deliveryOnly) {
+            const data = {clientId: order.clientId, clientType: order.clientId ? 'existing' : 'new', clientName: order.client.name,
+              clientEmail: order.client.email, clientPhone: order.client.phone, country: order.client.country, language: order.language, currency: 'USD'};
+            if (!linkQuoteClient(data)) throw Error('Seleccioná el cliente correcto antes de guardar.');
+            order.clientId = data.clientId;
+          }
+          fileOrders = existing ? fileOrders.map(o => o.id === order.id ? order : o) : [order, ...fileOrders];
+          clearTimeout(cloudSyncTimer);
+          try {
+            await saveWorkspaceNow();
+            suppressCloudSync = true; persist(); suppressCloudSync = false;
+            populateClientSelect(); renderClients();
+            return structuredClone(order);
+          } catch (error) {
+            fileOrders = previous; clients = previousClients; suppressCloudSync = false;
+            throw error;
+          }
+        }
+      });
       if (!appStarted) {
         bindEvents();
         appStarted = true;
@@ -309,6 +342,7 @@
       $("#appShell").hidden = false;
       setCloudStatus("Nube segura activa", "online");
       await receiptsApp.start(currentUser);
+      ordersApp.start();
       await cultsApp.start(currentUser);
       if (result === "migrated") toast("Datos locales sincronizados con Supabase.");
     } catch (error) {
@@ -357,6 +391,7 @@
     }
     await cloudClient.auth.signOut();
     currentUser = null;
+    ordersApp?.stop();
     receiptsApp?.stop();
     cultsApp?.stop();
     closePreview();
@@ -364,6 +399,7 @@
     $("#quoteDocument").replaceChildren();
     clients = [];
     quotes = [];
+    fileOrders = [];
     settings = structuredClone(defaults);
     localStorage.removeItem(STORAGE.clients);
     localStorage.removeItem(STORAGE.quotes);
@@ -380,6 +416,7 @@
       history: ["SEGUIMIENTO", "Presupuestos"],
       receipts: ["VENTAS DIRECTAS", "Recibos e ingresos"],
       cults: ["MARKETPLACE", "Ventas de Cults"],
+      orders: ["ARCHIVOS EXISTENTES", "Pedidos de archivos"],
       settings: ["SISTEMA", "Configuración"]
     };
     $$(".view").forEach(view => view.classList.toggle("active", view.id === `view-${viewName}`));
@@ -392,6 +429,7 @@
     if (viewName === "history") renderQuotes();
     if (viewName === "receipts") receiptsApp?.render();
     if (viewName === "cults") cultsApp?.render();
+    if (viewName === "orders") ordersApp?.render();
     if (viewName === "settings") populateSettings();
     if (viewName === "quote") refreshRateIfNeeded();
     window.scrollTo({ top: 0, behavior: "smooth" });
@@ -552,6 +590,7 @@
   }
 
   function buildDocument(record) {
+    if (record.kind === 'file_order') return ordersApp.document(record.order);
     if (record.kind === 'receipt') return receiptsApp.document(record.receipt);
     const data = record.data || record;
     const number = record.number || quoteNumber();
@@ -616,7 +655,7 @@
     if (!record && !quoteRateReady()) return;
     const generation = ++previewGeneration;
     const preview = record ? structuredClone(record) : { number: quoteNumber(), createdAt: new Date().toISOString(), data: getQuoteData() };
-    if (preview.kind !== 'receipt') {
+    if (preview.kind !== 'receipt' && preview.kind !== 'file_order') {
       try { await ensureQuoteBrlReference(preview.data); }
       catch { toast("No se pudo consultar USD/BRL. Se muestra solo el total en USD, sin una equivalencia en reales sin verificar."); }
     }
@@ -624,7 +663,7 @@
     $("#quotePrintSheet")?.remove();
     currentPreview = preview;
     $("#quoteDocument").innerHTML = buildDocument(currentPreview);
-    $("#quoteDocument").classList.toggle('receipt-document', currentPreview.kind === 'receipt');
+    $("#quoteDocument").classList.toggle('receipt-document', ['receipt', 'file_order'].includes(currentPreview.kind));
     $("#previewTitle").textContent = currentPreview.kind === 'receipt' ? 'Vista previa del recibo' : 'Vista previa del presupuesto';
     $("#copyWhatsapp").disabled = currentPreview.kind === 'receipt' && currentPreview.receipt.status === 'void';
     $("#previewModal").classList.add("open");
@@ -640,6 +679,7 @@
 
   function prepareQuotePrint() {
     if (!currentPreview) return null;
+    if (currentPreview.kind === 'file_order') return ordersApp.preparePrint(currentPreview.order);
     if (currentPreview.kind === 'receipt') return receiptsApp.preparePrint(currentPreview.receipt);
     let sheet = $("#quotePrintSheet");
     if (!sheet) {
@@ -697,6 +737,7 @@
   }
 
   function whatsappMessage(record) {
+    if (record.kind === 'file_order') return ordersApp.message(record.order);
     if (record.kind === 'receipt') return receiptsApp.message(record.receipt);
     const data = record.data || record;
     const number = record.number || quoteNumber();

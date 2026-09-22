@@ -1,0 +1,14 @@
+#view-orders [hidden]{display:none!important}
+#view-orders .split-heading{flex-wrap:wrap;gap:12px}
+#view-orders form{margin:24px 0}
+#view-orders .row-actions{flex-wrap:wrap;min-width:180px}
+#view-orders .receipt-confirm input{width:18px}
+.order-catalog{margin:26px 0;padding:20px;border:1px solid var(--line);border-radius:12px}
+.order-results{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:8px;margin:12px 0;max-height:310px;overflow:auto}
+.order-result{display:grid;grid-template-columns:1fr auto;gap:8px;text-align:left;background:#18181d;color:#eee;border:1px solid var(--line);border-radius:8px;padding:12px;cursor:pointer;font:inherit;font-size:12px}
+.order-result span{overflow-wrap:anywhere}.order-result small{grid-column:1/-1;color:#ff6971}.order-result:disabled{opacity:.45;cursor:default}
+.order-item{display:grid;grid-template-columns:minmax(0,1fr) 140px auto;gap:12px;align-items:end;margin:12px 0;padding:16px;border:1px solid var(--line);border-radius:10px}
+.order-doc-table th:first-child{width:77%}.order-doc-table th:nth-child(2){width:23%}
+.order-doc-totals{margin:20px 0 0 auto;width:65%;font-size:11px;color:#222}
+.order-doc-totals p{display:flex;justify-content:space-between;gap:15px;padding:6px 0;border-bottom:1px solid #ddd}
+@media(max-width:700px){.order-results{grid-template-columns:1fr}.order-item{grid-template-columns:minmax(0,1fr) 110px}.order-item>label:first-child{grid-column:1/-1}.order-doc-totals{width:100%}#view-orders .form-grid.two{grid-template-columns:1fr}}
