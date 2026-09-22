@@ -30,3 +30,38 @@ test('payment receipt validates full gross, rejects partial payment, and balance
   const o=order(),a=O.calculate(o),r={client:o.client,paid_date:'2026-09-22',language:'pt',currency:'USD',payment_method:'paypal',items:[{name:o.number,quantity:1,unitUsd:a.grossUsd}],exchange_rate:1,paid_amount:a.grossUsd,fee_amount:a.feeUsd,gross_usd:a.grossUsd,status:'paid'};
   C.validate(r);assert.throws(()=>C.validate({...r,paid_amount:20}));assert.equal(C.summarize([r,{...r,status:'void'}]).count,1);assert.equal(C.summarize([r]).net,37.01);
 });
+test('local equivalent follows country, includes PayPal gross and preserves the saved rate',async()=>{
+  for(const [country,currency,rate] of [['BR','BRL',5],['AR','ARS',1000]]){
+    const o=order();o.client.country=country;
+    await O.ensureLocalReference(o,async code=>{assert.equal(code,currency);return {currency,rate};});
+    assert.deepEqual(O.localReference(o),{currency,amount:C.round(39.69*rate)});
+    await O.ensureLocalReference(o,async()=>{throw Error('Must preserve saved reference');});
+    for(const language of ['es','en','pt']){
+      o.language=language;const formatted=C.currency(C.round(39.69*rate),currency,language);
+      assert.ok(O.documentHTML(o,()=> '').includes(formatted));assert.ok(O.message(o).includes(formatted));
+    }
+    o.items[0].unitUsd=25;
+    assert.equal(O.localReference(o).amount,C.round(O.calculate(o).grossUsd*rate));
+  }
+});
+test('old orders fetch a reference and a country change never relabels an old conversion',async()=>{
+  const o=order();assert.equal(O.localReference(o),null);
+  await O.ensureLocalReference(o,async()=>({currency:'BRL',rate:5}));
+  o.client.country='AR';assert.equal(O.localReference(o),null);
+  await O.ensureLocalReference(o,async()=>({currency:'ARS',rate:1000}));
+  assert.equal(O.localReference(o).currency,'ARS');
+  for(const country of ['US','OTHER']){
+    o.client.country=country;await O.ensureLocalReference(o,async()=>{throw Error('USD needs no conversion');});
+    assert.equal(O.localReference(o),null);assert.equal(o.localReference,undefined);
+  }
+});
+test('unavailable or invalid rates never produce a local amount; receipts retain actual payment currency',async()=>{
+  for(const ref of [{currency:'ARS',rate:1000},{currency:'BRL',rate:0},{currency:'BRL',rate:NaN}]){
+    const o=order();await assert.rejects(O.ensureLocalReference(o,async()=>ref));assert.equal(O.localReference(o),null);
+  }
+  const o=order();await assert.rejects(O.ensureLocalReference(o,async()=>{throw Error('Offline');}));
+  assert.ok(!O.documentHTML(o,()=> '').includes('Equivalente aproximado'));
+  await O.ensureLocalReference(o,async()=>({currency:'BRL',rate:5}));
+  const receipt={number:'R-TEST',status:'paid',paid_date:'2026-09-22',payment_method:'paypal',paid_amount:39.69,currency:'USD'};
+  assert.ok(!O.documentHTML(o,()=> '',o.items,1,1,receipt).includes('Equivalente aproximado'));
+});

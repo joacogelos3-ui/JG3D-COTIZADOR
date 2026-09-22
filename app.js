@@ -655,7 +655,10 @@
     if (!record && !quoteRateReady()) return;
     const generation = ++previewGeneration;
     const preview = record ? structuredClone(record) : { number: quoteNumber(), createdAt: new Date().toISOString(), data: getQuoteData() };
-    if (preview.kind !== 'receipt' && preview.kind !== 'file_order') {
+    if (preview.kind === 'file_order') {
+      try { await window.JG3DOrderCore.ensureLocalReference(preview.order, fetchCurrencyRate); }
+      catch { toast("No se pudo consultar el cambio. Se muestra el total en USD sin equivalencia local."); }
+    } else if (preview.kind !== 'receipt') {
       try { await ensureQuoteBrlReference(preview.data); }
       catch { toast("No se pudo consultar USD/BRL. Se muestra solo el total en USD, sin una equivalencia en reales sin verificar."); }
     }

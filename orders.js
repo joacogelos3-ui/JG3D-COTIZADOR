@@ -103,6 +103,8 @@ window.JG3DOrders={create(host){
     event.preventDefault();if(busy||!draft||!active)return;busy=true;$('#oSave').disabled=true;$('#oError').textContent='';const epoch=generation;
     try{
       const order=readDraft();O.validate(order);
+      try{await O.ensureLocalReference(order,host.rate);}catch{host.toast('No se pudo consultar el cambio. El pedido se guarda en USD sin equivalencia local.');}
+      if(epoch!==generation)return;
       await host.refreshReceipts();if(epoch!==generation)return;
       if(paidReceipt(order))throw Error('Este pedido ya tiene un recibo pagado. Actualizá el listado.');
       order.number=order.number || `JG3D-A-${new Date().getFullYear()}-${order.id.slice(0,8).toUpperCase()}`;order.updatedAt=new Date().toISOString();

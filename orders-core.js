@@ -36,6 +36,27 @@
     }
     return calculate(order);
   }
+  const localCurrency=order=>({BR:'BRL',AR:'ARS'}[order.client?.country] || 'USD');
+  function localReference(order) {
+    const currency=localCurrency(order),ref=order.localReference;
+    if(currency==='USD'||ref?.currency!==currency||!Number.isFinite(ref.rate)||ref.rate<=0)return null;
+    return {currency,amount:C.round(calculate(order).grossUsd*ref.rate)};
+  }
+  async function ensureLocalReference(order,fetchRate) {
+    const currency=localCurrency(order);
+    if(currency==='USD'){delete order.localReference;return;}
+    if(localReference(order))return;
+    delete order.localReference;
+    const ref=await fetchRate(currency);
+    if(ref?.currency!==currency||!Number.isFinite(ref.rate)||ref.rate<=0)throw Error('Tipo de cambio no disponible.');
+    order.localReference={...ref,mode:'automatic'};
+  }
+  function referenceText(order) {
+    const ref=localReference(order);
+    if(!ref)return '';
+    const label={es:'Equivalente aproximado',en:'Approximate equivalent',pt:'Equivalente aproximado'}[order.language];
+    return `${label}: ${C.currency(ref.amount,ref.currency,order.language)}`;
+  }
   function documentHTML(order,footer,items=order.items,page=1,pages=1,receipt=null) {
     const lang=order.language, l=labels[lang], common=C.labels[lang], e=C.escape, money=n=>C.currency(n,'USD',lang), a=calculate(order), last=page===pages;
     const field=(name,value)=>`<div class="doc-field"><span>${e(name)}</span><strong>${e(value)}</strong></div>`;
@@ -46,11 +67,11 @@
       <section class="doc-section"><table class="receipt-doc-table order-doc-table"><thead><tr><th>${l.item}</th><th>${l.price}</th></tr></thead><tbody>${rows}</tbody></table></section>
       ${last?`<section class="order-doc-totals"><p><span>${l.subtotal}</span><strong>${money(a.subtotalUsd)}</strong></p>${order.personalized?`<p><span>${l.logo}</span><strong>+ ${money(a.logoUsd)}</strong></p>`:''}${a.discountUsd>0?`<p><span>${l.discount}</span><strong>− ${money(a.discountUsd)}</strong></p>`:''}${order.paymentMethod==='paypal'?`<p><span>${l.adjusted}</span><strong>${money(a.netUsd)}</strong></p>`:''}</section>
       <section class="doc-section"><h3>${l.license}: ${order.license==='commercial'?l.commercial:l.personal}</h3><p>${l.terms}</p>${order.notes?`<p><strong>${l.notes}:</strong> ${e(order.notes).replace(/\n/g,'<br>')}</p>`:''}</section>
-      <div class="doc-total"><div><span>${receipt?l.received:order.paymentMethod==='paypal'?l.paypal:l.total}</span><strong>${receipt?C.currency(receipt.paid_amount,receipt.currency,lang):money(a.grossUsd)}</strong>${receipt&&receipt.currency!=='USD'?`<small>${money(a.grossUsd)}</small>`:''}</div></div>${receipt?`<p class="receipt-legal">${common.legal}</p>`:''}`:''}${footer(common)}`;
+      <div class="doc-total"><div><span>${receipt?l.received:order.paymentMethod==='paypal'?l.paypal:l.total}</span><strong>${receipt?C.currency(receipt.paid_amount,receipt.currency,lang):money(a.grossUsd)}</strong>${!receipt&&referenceText(order)?`<small class="doc-price-reference">${e(referenceText(order))}</small>`:''}${receipt&&receipt.currency!=='USD'?`<small>${money(a.grossUsd)}</small>`:''}</div></div>${receipt?`<p class="receipt-legal">${common.legal}</p>`:''}`:''}${footer(common)}`;
   }
   function message(order) {
     const l=labels[order.language],a=calculate(order),m=n=>C.currency(n,'USD',order.language);
-    return `${l.hello} ${order.client.name},\n${l.title}: ${order.number}\n\n${order.items.map(i=>`• ${i.name}: ${m(i.unitUsd)}`).join('\n')}\n\n${l.subtotal}: ${m(a.subtotalUsd)}${order.personalized?'\n'+l.logo+': + '+m(a.logoUsd):''}\n${l.discount}: − ${m(a.discountUsd)}\n${order.paymentMethod==='paypal'?l.paypal:l.total}: ${m(a.grossUsd)}\n\n${l.license}: ${order.license==='commercial'?l.commercial:l.personal}\n${l.valid}: ${order.validUntil}\n${l.terms}${order.notes?'\n\n'+order.notes:''}`;
+    return `${l.hello} ${order.client.name},\n${l.title}: ${order.number}\n\n${order.items.map(i=>`• ${i.name}: ${m(i.unitUsd)}`).join('\n')}\n\n${l.subtotal}: ${m(a.subtotalUsd)}${order.personalized?'\n'+l.logo+': + '+m(a.logoUsd):''}\n${l.discount}: − ${m(a.discountUsd)}\n${order.paymentMethod==='paypal'?l.paypal:l.total}: ${m(a.grossUsd)}${referenceText(order)?'\n'+referenceText(order):''}\n\n${l.license}: ${order.license==='commercial'?l.commercial:l.personal}\n${l.valid}: ${order.validUntil}\n${l.terms}${order.notes?'\n\n'+order.notes:''}`;
   }
   function preparePrint(order,footer,receipt=null) {
     if(document.querySelector('#quotePrintSheet')) return document.querySelector('#quotePrintSheet');
@@ -65,5 +86,5 @@
     });
     build();while(size>1&&overflows()){size--;build();}return sheet;
   }
-  root.JG3DOrderCore={calculate,validate,documentHTML,message,preparePrint,labels};
+  root.JG3DOrderCore={calculate,validate,documentHTML,message,preparePrint,labels,localReference,ensureLocalReference};
 })(typeof window==='undefined'?globalThis:window);
