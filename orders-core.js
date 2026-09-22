@@ -54,10 +54,16 @@
   }
   function preparePrint(order,footer,receipt=null) {
     if(document.querySelector('#quotePrintSheet')) return document.querySelector('#quotePrintSheet');
-    const sheet=document.createElement('div');sheet.id='quotePrintSheet';sheet.className='receipt-print-root';document.body.appendChild(sheet);
-    let size=6;
+    const sheet=document.createElement('div');sheet.id='quotePrintSheet';sheet.className='receipt-print-root order-print-root';document.body.appendChild(sheet);
+    // Try the complete order first; split only when its rendered content exceeds A4.
+    let size=order.items.length;
     const build=()=>{const chunks=[];for(let i=0;i<order.items.length;i+=size)chunks.push(order.items.slice(i,i+size));sheet.innerHTML=chunks.map((chunk,i)=>`<section class="receipt-print-page"><article class="quote-document receipt-document" lang="${order.language}">${documentHTML(order,footer,chunk,i+1,chunks.length,receipt)}</article></section>`).join('');};
-    build();while(size>1&&[...sheet.querySelectorAll('article')].some(a=>a.offsetHeight>1000)){size--;build();}return sheet;
+    const overflows=()=>[...sheet.querySelectorAll('article')].some(article=>{
+      const page=article.parentElement,style=getComputedStyle(page);
+      const available=page.clientHeight-parseFloat(style.paddingTop)-parseFloat(style.paddingBottom)-2;
+      return Math.max(article.offsetHeight,article.scrollHeight)>available;
+    });
+    build();while(size>1&&overflows()){size--;build();}return sheet;
   }
   root.JG3DOrderCore={calculate,validate,documentHTML,message,preparePrint,labels};
 })(typeof window==='undefined'?globalThis:window);

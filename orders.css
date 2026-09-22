@@ -11,4 +11,11 @@
 .order-doc-table th:first-child{width:77%}.order-doc-table th:nth-child(2){width:23%}
 .order-doc-totals{margin:20px 0 0 auto;width:65%;font-size:11px;color:#222}
 .order-doc-totals p{display:flex;justify-content:space-between;gap:15px;padding:6px 0;border-bottom:1px solid #ddd}
+.order-print-root .doc-header{padding-bottom:16px}
+.order-print-root .doc-grid{grid-template-columns:repeat(3,minmax(0,1fr));gap:10px 20px;margin:14px 0;padding:12px 16px}
+.order-print-root .receipt-doc-table td{padding:8px 6px}
+.order-print-root .order-doc-totals{margin-top:12px;width:65%}
+.order-print-root .order-doc-totals p{margin:6px 0;padding:5px 0}
+.order-print-root .doc-total{margin-top:18px;padding:16px 22px}
+.order-print-root .doc-footer{margin-top:18px;padding-top:12px}
 @media(max-width:700px){.order-results{grid-template-columns:1fr}.order-item{grid-template-columns:minmax(0,1fr) 110px}.order-item>label:first-child{grid-column:1/-1}.order-doc-totals{width:100%}#view-orders .form-grid.two{grid-template-columns:1fr}}
